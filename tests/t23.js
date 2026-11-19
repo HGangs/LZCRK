@@ -46,10 +46,10 @@ window.__mockCloud = function(opts){
           return Promise.resolve({ error: null });
         },
         select: function(){
+          var row = { rev: m.remoteRev, updated_at: '2026-11-19T05:00:00Z', updated_by: 'tester' };
           var chain = {
-            single: function(){
-              return Promise.resolve({ data: { rev: m.remoteRev, updated_at: '2026-11-19T05:00:00Z', updated_by: 'tester' }, error: null });
-            },
+            single: function(){ return Promise.resolve({ data: row, error: null }); },
+            limit: function(){ return Promise.resolve({ data: [row], error: null }); },
             order: function(){ return { limit: function(){
               return Promise.resolve({ data: m.hist, error: null });
             } }; }

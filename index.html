@@ -1328,14 +1328,16 @@ async function cloudInit(){
 async function cloudPull(silent){
   if(!cloud.on) return false;
   try{
-    const res = await cloud.rdb.from('wms_state').select('*').eq('id', CLOUD_CFG.docId).single();
+    /* 注意：不能用 .single()。云端为空时 PostgREST 返回 PGRST116（无行）而非空数据，
+       一旦按错误处理，cloud.pulled 永远为 false，任何设备都无法首次推送。 */
+    const res = await cloud.rdb.from('wms_state').select('*').eq('id', CLOUD_CFG.docId).limit(1);
     if(res.error){
       cloud.err = '读取失败：' + (res.error.message || '权限或网络异常');
       updateCloudBadge('error');
       if(!silent) console.warn('[cloud] pull', res.error.message);
       return false;
     }
-    const row = res.data;
+    const row = Array.isArray(res.data) ? res.data[0] : res.data;
     if(!row || !row.payload){ cloud.rev = 0; cloud.pulled = true; return false; }   // 云端为空：允许首次初始化推送
     cloud.rev = Number(row.rev) || 0;
     cloud.lastSync = row.updated_at || '';
@@ -1362,9 +1364,11 @@ function cloudSchedulePush(){
 }
 /* 读回云端最新 rev，用于判断条件更新是否命中 */
 async function cloudRemoteRev(){
-  const r = await cloud.rdb.from('wms_state').select('rev,updated_at,updated_by').eq('id', CLOUD_CFG.docId).single();
-  if(r.error || !r.data) return null;
-  return { rev: Number(r.data.rev) || 0, at: r.data.updated_at || '', by: r.data.updated_by || '' };
+  const r = await cloud.rdb.from('wms_state').select('rev,updated_at,updated_by').eq('id', CLOUD_CFG.docId).limit(1);
+  if(r.error) return null;
+  const row = Array.isArray(r.data) ? r.data[0] : r.data;
+  if(!row) return { rev: 0, at: '', by: '' };     // 无行 = 云端为空，rev 基线 0
+  return { rev: Number(row.rev) || 0, at: row.updated_at || '', by: row.updated_by || '' };
 }
 async function cloudMarkConflict(){
   cloud.conflict = true;
@@ -1515,9 +1519,9 @@ async function cloudHistoryRender(){
 async function cloudRestoreSnapshot(snapId){
   if(!cloud.on){ toast('当前不在云端模式', 'bad'); return; }
   if(!can('backups', 'restore') && !canMod('backups', 'restore')){ toast('无恢复权限', 'bad'); return; }
-  const res = await cloud.rdb.from('wms_state_history').select('id,rev,updated_at,updated_by,payload').eq('id', snapId).single();
-  if(res.error || !res.data || !res.data.payload){ toast('读取该快照失败', 'bad'); return; }
-  const snap = res.data;
+  const res = await cloud.rdb.from('wms_state_history').select('id,rev,updated_at,updated_by,payload').eq('id', snapId).limit(1);
+  const snap = Array.isArray(res.data) ? res.data[0] : res.data;
+  if(res.error || !snap || !snap.payload){ toast('读取该快照失败', 'bad'); return; }
   const p = snap.payload;
   const pn = Array.isArray(p.projects) ? p.projects.length : 0;
   const rn = Array.isArray(p.records) ? p.records.length : 0;
@@ -2447,9 +2451,9 @@ const PAGES = {
 const NAV_ORDER = [
   ['总览', ['dashboard']],
   ['业务操作', ['inbound','outbound','inboundLedger','outboundLedger']],
-  ['库存数据', ['stock','materialDetail']],
+  ['库存数据', ['usageBoard','stock','materialDetail']],
   ['基础档案', ['materials','warehouses','orgUnits']],
-  ['项目', ['projectList','projects','projectTransfer','usageBoard']],
+  ['项目', ['projectList','projects','projectTransfer']],
   ['查询', ['records']],
   ['系统管理', ['accounts','logs','backups','settings']]
 ];
@@ -6255,7 +6259,7 @@ function viewSettings(){
           '· 账号停用后无法登录，已有会话在下次操作时失效；<br>' +
           '· 所有写入操作记录操作日志，可在「操作日志」中追溯；<br>' +
           '· 数据与备份均保存在本机浏览器，建议定期「下载当前数据」留档。' +
-        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.22</div></div><div><div class="k">存储方式</div><div class="v">' +
+        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.23</div></div><div><div class="k">存储方式</div><div class="v">' +
           (cloudEnabled() ? '云端共享（CloudBase PG）' : 'localStorage') + '</div></div>' +
         (cloudEnabled()
           ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap">' +
