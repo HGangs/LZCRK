@@ -1090,7 +1090,8 @@ const CLOUD_CFG = {
           'wms-workbench-32376.app.workbuddy.host'],
   docId: 'main'
 };
-const cloud = { on:false, ready:false, pulled:false, rdb:null, auth:null, rev:0, pushing:false, timer:null, lastSync:'', err:'' };
+const cloud = { on:false, ready:false, pulled:false, rdb:null, auth:null, rev:0, pushing:false, timer:null,
+  lastSync:'', err:'', conflict:false, conflictRev:0, conflictAt:'', conflictBy:'' };
 
 function cloudEnabled(){
   if(location.protocol === 'file:') return false;
@@ -1101,19 +1102,32 @@ function cloudEnabled(){
       || /\.tcloudbaseapp\.com$/i.test(location.hostname)
       || /\.app\.workbuddy\.host$/i.test(location.hostname);
 }
+function cloudUser(){
+  try{
+    const u = (typeof currentUser === 'function') ? currentUser() : null;
+    return (u && (u.name || u.account)) || '未登录';
+  }catch(e){ return '未登录'; }
+}
+function cloudTime(ts){
+  const t = String(ts || '').replace('T', ' ').replace(/\..*$/, '');
+  return t ? t.slice(0, 19) : '—';
+}
 function updateCloudBadge(state){
   const el = document.getElementById('cloudBadge');
   if(!el) return;
-  if(!cloud.on){ el.innerHTML = ''; return; }
+  if(!cloud.on){ el.innerHTML = ''; el.onclick = null; el.style.cursor = ''; return; }
   const map = {
-    syncing: ['同步中…', 'var(--amber)', '数据正在写入云端'],
-    ok: ['云同步', 'var(--green)', '数据已保存到云端 · 最近 ' + (cloud.lastSync || '').replace('T',' ').slice(0,19)],
-    error: ['同步失败', 'var(--red)', cloud.err || '云端写入失败，本地数据已保留']
+    syncing:  ['同步中…', 'var(--amber)', '数据正在写入云端'],
+    ok:       ['云同步', 'var(--green)', '数据已保存到云端 · 最近 ' + cloudTime(cloud.lastSync)],
+    conflict: ['数据冲突', 'var(--red)', '云端已被他人更新（rev ' + cloud.conflictRev + '），点击处理'],
+    error:    ['同步失败', 'var(--red)', cloud.err || '云端写入失败，本地数据已保留']
   };
   const it = map[state || 'ok'];
   el.innerHTML = '<span class="cloud-dot" style="background:' + it[1] + '"></span>' +
     '<span style="color:' + it[1] + '">' + it[0] + '</span>';
   el.title = it[2];
+  if(state === 'conflict'){ el.style.cursor = 'pointer'; el.onclick = function(){ modalCloudConflict(); }; }
+  else { el.style.cursor = ''; el.onclick = null; }
 }
 async function cloudLoadSdk(){
   const urls = [
@@ -1146,7 +1160,7 @@ async function cloudInit(){
     cloud.rdb = app.rdb();
     cloud.on = true;
     await cloudPull();
-    updateCloudBadge('ok');
+    updateCloudBadge(cloud.conflict ? 'conflict' : 'ok');
   }catch(e){
     cloud.err = String(e && e.message ? e.message : e).slice(0, 80);
     cloud.on = false;
@@ -1169,6 +1183,7 @@ async function cloudPull(silent){
     cloud.rev = Number(row.rev) || 0;
     cloud.lastSync = row.updated_at || '';
     cloud.pulled = true;
+    cloud.conflict = false;
     const remote = row.payload;
     if(!remote || !Array.isArray(remote.records)) return false;
     db = remote;
@@ -1183,26 +1198,66 @@ function cloudSchedulePush(){
   /* 必须先确认云端状态（拉到数据或确认云端为空）才允许推送，
      否则本地新 seed 的演示数据会在断网/权限异常时覆盖云端真实数据。 */
   if(!cloud.on || !cloud.pulled) return;
+  if(cloud.conflict){ updateCloudBadge('conflict'); return; }   // 冲突未处理前不再写入，避免继续覆盖
   clearTimeout(cloud.timer);
   updateCloudBadge('syncing');
-  cloud.timer = setTimeout(cloudPush, 800);
+  cloud.timer = setTimeout(function(){ cloudPush(); }, 800);
+}
+/* 读回云端最新 rev，用于判断条件更新是否命中 */
+async function cloudRemoteRev(){
+  const r = await cloud.rdb.from('wms_state').select('rev,updated_at,updated_by').eq('id', CLOUD_CFG.docId).single();
+  if(r.error || !r.data) return null;
+  return { rev: Number(r.data.rev) || 0, at: r.data.updated_at || '', by: r.data.updated_by || '' };
+}
+async function cloudMarkConflict(){
+  cloud.conflict = true;
+  const meta = await cloudRemoteRev();
+  if(meta){
+    cloud.conflictRev = meta.rev;
+    cloud.conflictAt = meta.at;
+    cloud.conflictBy = meta.by;
+    cloud.rev = meta.rev;      // 本地基线对齐云端，后续强制覆盖时以它 +1
+  }
+  updateCloudBadge('conflict');
+  toast('云端数据已被他人更新，本地改动暂未上传', 'bad');
 }
 async function cloudPush(){
-  if(!cloud.on || cloud.pushing) return;
+  if(!cloud.on || cloud.pushing || cloud.conflict) return;
   cloud.pushing = true;
   try{
     const payload = JSON.parse(JSON.stringify(db));
     const rev = cloud.rev + 1;
-    const row = {
-      id: CLOUD_CFG.docId, payload, rev,
-      updated_at: new Date().toISOString(),
-      updated_by: (typeof currentUser === 'function' && currentUser() ? currentUser().name : '匿名') || '匿名'
-    };
-    const res = await cloud.rdb.from('wms_state').upsert(row, { onConflict: 'id' });
-    if(res.error) throw new Error(res.error.message || '写入失败');
+    const ts = new Date().toISOString();
+    const by = cloudUser();
+    let wrote = false;
+
+    if(cloud.rev > 0){
+      /* 乐观锁：只有云端 rev 仍等于本地基线时才更新 */
+      const upd = await cloud.rdb.from('wms_state')
+        .update({ payload: payload, rev: rev, updated_at: ts, updated_by: by })
+        .eq('id', CLOUD_CFG.docId).eq('rev', cloud.rev);
+      if(upd.error) throw new Error(upd.error.message || '写入失败');
+      const chk = await cloudRemoteRev();
+      if(!chk) throw new Error('写入后校验失败');
+      wrote = chk.rev === rev;
+    }else{
+      /* 云端为空：首次插入；并发插入会触发主键冲突，同样按冲突处理 */
+      const ins = await cloud.rdb.from('wms_state')
+        .insert([{ id: CLOUD_CFG.docId, payload: payload, rev: rev, updated_at: ts, updated_by: by }]);
+      if(ins.error){
+        const msg = String(ins.error.message || '');
+        if(/duplicate|23505|conflict/i.test(msg)){ await cloudMarkConflict(); return; }
+        throw new Error(msg || '写入失败');
+      }
+      const chk = await cloudRemoteRev();
+      wrote = !!chk && chk.rev === rev;
+    }
+
+    if(!wrote){ await cloudMarkConflict(); return; }
     cloud.rev = rev;
-    cloud.lastSync = row.updated_at;
+    cloud.lastSync = ts;
     cloud.err = '';
+    cloud.conflict = false;
     updateCloudBadge('ok');
   }catch(e){
     cloud.err = String(e && e.message ? e.message : e).slice(0, 80);
@@ -1210,7 +1265,129 @@ async function cloudPush(){
     console.warn('[cloud] push failed', e);
   }finally{ cloud.pushing = false; }
 }
-function cloudManualRefresh(){ if(cloud.on) cloudPull(false); else toast('当前不在云端模式', 'bad'); }
+function cloudManualRefresh(){
+  if(!cloud.on){ toast('当前不在云端模式', 'bad'); return; }
+  cloudPull(false);
+}
+/* ---------- 冲突处理 ---------- */
+function modalCloudConflict(){
+  if(!cloud.conflict){ toast('当前没有冲突', 'ok'); return; }
+  openModal('云端数据冲突',
+    '<div class="hint" style="line-height:1.9">' +
+      '另一个窗口或设备在你编辑期间保存了数据。系统采用整份数据单文档存储，<b>无法自动合并</b>，需要选择保留哪一份。<br>' +
+      '你确认前，本地改动只留在本机，不会覆盖云端。' +
+    '</div>' +
+    '<div class="info-grid mt12" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+      '<div class="info-item"><div class="k">云端版本</div><div class="v mono">rev ' + cloud.conflictRev + '</div></div>' +
+      '<div class="info-item"><div class="k">云端保存时间</div><div class="v">' + esc(cloudTime(cloud.conflictAt)) + '</div></div>' +
+      '<div class="info-item"><div class="k">云端操作人</div><div class="v">' + esc(cloud.conflictBy || '—') + '</div></div>' +
+      '<div class="info-item"><div class="k">本地版本</div><div class="v mono">rev ' + cloud.rev + '</div></div>' +
+    '</div>',
+    '<button class="btn" data-act="closeModal">稍后处理</button>' +
+    '<button class="btn" data-act="cloudForcePush">以我的为准覆盖</button>' +
+    '<button class="btn btn-primary" data-act="cloudTakeRemote">载入云端版本</button>');
+}
+async function cloudTakeRemote(){
+  closeModal();
+  const ok = await cloudPull(false);
+  if(ok){ cloud.conflict = false; updateCloudBadge('ok'); toast('已载入云端版本，本地改动已放弃', 'ok'); }
+}
+async function cloudForcePush(){
+  if(!cloud.on){ toast('当前不在云端模式', 'bad'); return; }
+  if(cloud.pushing) return;
+  cloud.pushing = true;
+  try{
+    const meta = await cloudRemoteRev();
+    const base = meta ? meta.rev : cloud.rev;
+    const rev = base + 1;
+    const payload = JSON.parse(JSON.stringify(db));
+    const ts = new Date().toISOString();
+    const by = cloudUser();
+    const res = await cloud.rdb.from('wms_state')
+      .upsert({ id: CLOUD_CFG.docId, payload: payload, rev: rev, updated_at: ts, updated_by: by }, { onConflict: 'id' });
+    if(res.error) throw new Error(res.error.message || '覆盖失败');
+    cloud.rev = rev;
+    cloud.lastSync = ts;
+    cloud.conflict = false;
+    cloud.err = '';
+    updateCloudBadge('ok');
+    closeModal();
+    render();
+    toast('已用本地版本覆盖云端（上一版已进入快照）', 'ok');
+  }catch(e){
+    cloud.err = String(e && e.message ? e.message : e).slice(0, 80);
+    updateCloudBadge('error');
+    toast('覆盖失败：' + cloud.err, 'bad');
+  }finally{ cloud.pushing = false; }
+}
+/* ---------- 云端历史快照 ---------- */
+async function cloudHistoryLoad(){
+  if(!cloud.on){ toast('当前不在云端模式', 'bad'); return []; }
+  const res = await cloud.rdb.from('wms_state_history')
+    .select('id,rev,updated_at,updated_by,archived_at')
+    .eq('doc_id', CLOUD_CFG.docId)
+    .order('archived_at', { ascending: false })
+    .limit(30);
+  if(res.error){ toast('读取快照失败：' + (res.error.message || ''), 'bad'); return []; }
+  return Array.isArray(res.data) ? res.data : [];
+}
+function modalCloudHistory(){
+  if(!cloud.on){ toast('当前不在云端模式', 'bad'); return; }
+  openModal('云端历史快照',
+    '<div class="hint">每次云端保存前会自动归档上一版，最多保留 30 份。恢复会把该版本重新写为最新（当前版本同样会进入快照）。</div>' +
+    '<div id="cloudHistBody" class="mt12"><div class="empty" style="padding:26px">正在读取…</div></div>',
+    '<button class="btn" data-act="closeModal">关闭</button>');
+  cloudHistoryRender();
+}
+async function cloudHistoryRender(){
+  const box = document.getElementById('cloudHistBody');
+  if(!box) return;
+  const list = await cloudHistoryLoad();
+  if(!list.length){ box.innerHTML = '<div class="empty" style="padding:26px">还没有历史快照（首次保存后才会产生）</div>'; return; }
+  box.innerHTML = '<div class="table-wrap" style="max-height:52vh"><table><thead><tr>' +
+      '<th>归档时间</th><th>数据时间</th><th class="num">rev</th><th>操作人</th><th style="width:86px"></th>' +
+    '</tr></thead><tbody>' +
+    list.map(it => '<tr>' +
+      '<td class="mono">' + esc(cloudTime(it.archived_at)) + '</td>' +
+      '<td class="mono">' + esc(cloudTime(it.updated_at)) + '</td>' +
+      '<td class="num mono">' + (Number(it.rev) || 0) + '</td>' +
+      '<td>' + esc(it.updated_by || '—') + '</td>' +
+      '<td style="text-align:right"><button class="btn btn-sm" data-act="cloudRestore" data-id="' + it.id + '">恢复</button></td>' +
+    '</tr>').join('') + '</tbody></table></div>';
+}
+async function cloudRestoreSnapshot(snapId){
+  if(!cloud.on){ toast('当前不在云端模式', 'bad'); return; }
+  if(!can('backups', 'restore') && !canMod('backups', 'restore')){ toast('无恢复权限', 'bad'); return; }
+  const res = await cloud.rdb.from('wms_state_history').select('id,rev,updated_at,updated_by,payload').eq('id', snapId).single();
+  if(res.error || !res.data || !res.data.payload){ toast('读取该快照失败', 'bad'); return; }
+  const snap = res.data;
+  const p = snap.payload;
+  const pn = Array.isArray(p.projects) ? p.projects.length : 0;
+  const rn = Array.isArray(p.records) ? p.records.length : 0;
+  askConfirm({title:'恢复云端快照', heading:'用 rev ' + (Number(snap.rev) || 0) + ' 覆盖当前数据？', danger:true, okText:'确认恢复',
+    body:'该版本保存于 <b>' + esc(cloudTime(snap.updated_at)) + '</b>，项目 <b>' + pn + '</b> 个、流水 <b>' + rn + '</b> 条。<br>' +
+      '恢复后当前版本会进入快照，可再次找回。',
+    onOk: async function(){
+      try{
+        db = p;
+        normalizeDB();
+        const meta = await cloudRemoteRev();
+        const rev = (meta ? meta.rev : cloud.rev) + 1;
+        const ts = new Date().toISOString();
+        const up = await cloud.rdb.from('wms_state').upsert(
+          { id: CLOUD_CFG.docId, payload: db, rev: rev, updated_at: ts, updated_by: cloudUser() + '(回滚)' },
+          { onConflict: 'id' });
+        if(up.error) throw new Error(up.error.message || '写入失败');
+        cloud.rev = rev; cloud.lastSync = ts; cloud.conflict = false;
+        try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){}
+        saveDB(); render(); closeModal();
+        logAct('数据备份','恢复','恢复云端快照 rev ' + (Number(snap.rev) || 0));
+        toast('已恢复到该快照', 'ok');
+      }catch(e){
+        toast('恢复失败：' + (e && e.message ? e.message : e), 'bad');
+      }
+    }});
+}
 /* 旧数据兼容：入库类型由布尔 isReturn 迁移为三选一枚举；物料补齐品牌/分类字段；补齐账号体系 */
 function normalizeDB(){
   (db.records || []).forEach(r => {
@@ -5656,11 +5833,17 @@ function viewSettings(){
           '· 账号停用后无法登录，已有会话在下次操作时失效；<br>' +
           '· 所有写入操作记录操作日志，可在「操作日志」中追溯；<br>' +
           '· 数据与备份均保存在本机浏览器，建议定期「下载当前数据」留档。' +
-        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.19</div></div><div><div class="k">存储方式</div><div class="v">' +
+        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.20</div></div><div><div class="k">存储方式</div><div class="v">' +
           (cloudEnabled() ? '云端共享（CloudBase PG）' : 'localStorage') + '</div></div>' +
         (cloudEnabled()
-          ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap"><button class="btn btn-sm" data-act="cloudPullNow">' + icon('cloud') + '从云端刷新</button>' +
-            '<span class="sub">' + (cloud.on ? '已连接 · 最近同步 ' + (cloud.lastSync || '—').replace('T',' ').slice(0,19) : '未连接') + '</span></div>'
+          ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap">' +
+              '<button class="btn btn-sm" data-act="cloudPullNow">' + icon('cloud') + '从云端刷新</button>' +
+              '<button class="btn btn-sm" data-act="cloudHistory">' + icon('clock') + '历史快照</button>' +
+              (cloud.conflict ? '<button class="btn btn-sm btn-danger" data-act="cloudConflictModal">' + icon('alert') + '处理数据冲突</button>' : '') +
+              '<span class="sub">' + (cloud.on
+                ? (cloud.conflict ? '存在冲突：云端已被他人更新' : '已连接 · 最近同步 ' + cloudTime(cloud.lastSync))
+                : '未连接') + '</span>' +
+            '</div>'
           : '') +
         '</div></div>' +
     '</div></div>';
@@ -7148,6 +7331,11 @@ document.addEventListener('click', e => {
   }
 
   if(act === 'cloudPullNow'){ cloudManualRefresh(); return; }
+  if(act === 'cloudHistory'){ modalCloudHistory(); return; }
+  if(act === 'cloudConflictModal'){ modalCloudConflict(); return; }
+  if(act === 'cloudRestore'){ cloudRestoreSnapshot(t.dataset.id); return; }
+  if(act === 'cloudForcePush'){ cloudForcePush(); return; }
+  if(act === 'cloudTakeRemote'){ cloudTakeRemote(); return; }
 
   /* ---- 显示与字体 ---- */
   if(act === 'dpFontDetect'){

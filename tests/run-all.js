@@ -4,7 +4,7 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const FILES = ['t1.js', 't2.js', 't3.js', 't4.js', 't5.js', 't6.js', 't7.js', 't8.js', 't9.js', 't10.js', 't11.js', 't12.js', 't13.js', 't14.js', 't15.js', 't16.js', 't17.js', 't18.js', 't19.js', 't20.js', 't21.js', 't22.js'];
+const FILES = ['t1.js', 't2.js', 't3.js', 't4.js', 't5.js', 't6.js', 't7.js', 't8.js', 't9.js', 't10.js', 't11.js', 't12.js', 't13.js', 't14.js', 't15.js', 't16.js', 't17.js', 't18.js', 't19.js', 't20.js', 't21.js', 't22.js', 't23.js'];
 
 /* 每个脚本覆盖的范围，便于失败时快速定位 */
 const SCOPE = {
@@ -29,7 +29,8 @@ const SCOPE = {
   't19.js': '台账导出、施工单位管理（多联系人）、项目施工单位与筛选、设备使用看板',
   't20.js': '删除出库单连带清理关联调拨、失效调拨清理入口、库存与项目持有回滚',
   't21.js': '项目清单右侧详情抽屉（点击行编辑/Esc/遮罩）、项目视图左栏行政区两级目录',
-  't22.js': '出库单位联系人联动、记录页删除流水、角色权限 19 模块齐全、字体缩放与字体设置'
+  't22.js': '出库单位联系人联动、记录页删除流水、角色权限 19 模块齐全、字体缩放与字体设置',
+  't23.js': '云端乐观锁（rev 条件更新 / 冲突检测 / 冲突阻塞推送 / 强制覆盖）与历史快照 UI'
 };
 
 let failed = 0;
