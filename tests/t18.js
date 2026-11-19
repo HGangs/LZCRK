@@ -21,7 +21,9 @@ setTimeout(async ()=>{
   console.log('超管账号:', w.eval('SUPER_ACCOUNT'), '| 内置用户:', w.eval('db.users[0].account'));
   const viewerPerms = JSON.parse(w.eval("JSON.stringify(db.roles.find(r=>r.id==='r_viewer').perms)"));
   const guest = JSON.parse(w.eval('JSON.stringify(GUEST_PERMS)'));
-  const gk = Object.keys(guest).sort(), vk = Object.keys(viewerPerms).sort();
+  /* 角色矩阵 v4.19 起写全 19 个模块，空数组表示无权限；只比对有权限的模块 */
+  const gk = Object.keys(guest).sort();
+  const vk = Object.keys(viewerPerms).filter(k => Array.isArray(viewerPerms[k]) && viewerPerms[k].length).sort();
   console.log('游客模块:', gk.join(','));
   console.log('与「项目只读」角色一致:', JSON.stringify(gk) === JSON.stringify(vk),
     '| 动作全为 view:', Object.values(guest).every(a => a.length === 1 && a[0] === 'view'));
@@ -55,12 +57,16 @@ setTimeout(async ()=>{
   console.log('\n--- 4. 项目视图 → 出库物资调拨 ---');
   click('.nav-item[data-page="projects"]');
   await sleep(40);
-  const firstCard = q('.pcard');
-  const pid = firstCard.dataset.id;
-  console.log('左栏卡片调拨按钮:', qa('.plist .pcard [data-act="gotoTransfer"]').length, '/', qa('.plist .pcard').length);
-  console.log('详情头部调拨按钮:', qa('.proj-detail-body').length, !!q('.card-head [data-act="gotoTransfer"]'));
-  const goBtn = q('.plist .pcard [data-act="gotoTransfer"]');
-  if(goBtn) goBtn.click(); else errors.push('missing gotoTransfer in card');
+  /* v4.21：左栏改为平铺单行（仅编号-名称），调拨入口统一放在右侧详情头部 */
+  q('.pcard').click();
+  await sleep(40);
+  const pid = w.eval('state.projectId');
+  console.log('左栏平铺行数:', qa('.plist .pcard').length,
+    '| 行内调拨按钮:', qa('.plist .pcard [data-act="gotoTransfer"]').length,
+    '| 行内文本:', (q('.pcard') || {textContent:''}).textContent.replace(/\s+/g,' ').trim().slice(0,24));
+  const goBtn = q('.proj-split > .card:nth-child(2) [data-act="gotoTransfer"]');
+  console.log('详情头部调拨按钮:', !!goBtn);
+  if(goBtn) goBtn.click(); else errors.push('missing gotoTransfer in detail head');
   await sleep(40);
   console.log('跳转后页面:', w.eval('state.page'), '| 预选项目一致:', w.eval('state.tfProjectId') === pid,
     '| Tab:', w.eval('state.tfTab'));

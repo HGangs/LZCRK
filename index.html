@@ -60,7 +60,7 @@ button{font-family:inherit}
 
 /* generic */
 .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
-.card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;min-height:52px;box-sizing:border-box;
   border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
 .card-title{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px;white-space:nowrap}
 .card-title svg{width:16px;height:16px;flex:0 0 16px;color:var(--text2)}
@@ -182,12 +182,18 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-of
 .sum-total{border-top:1px solid var(--border);margin-top:7px;padding-top:9px}
 .sum-total b{font-size:17px}
 
-.plist{display:flex;flex-direction:column;gap:7px}
-.pcard{border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;background:#fff;transition:.12s}
-.pcard:hover{border-color:#b9c0ca;background:#fcfcfd}
-.pcard.active{border-color:var(--primary);background:var(--primary-weak)}
-.pcard .pn{font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px}
-.pcard .pm{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap}
+.plist{display:flex;flex-direction:column;gap:1px}
+/* 项目视图左栏：平铺单行（仅 编号-名称），无卡片边框 */
+.pcard{display:flex;align-items:center;gap:6px;padding:6px 9px;border:0;border-radius:5px;
+  cursor:pointer;background:transparent;transition:background .12s,color .12s;
+  font-size:12.5px;line-height:1.55;min-width:0}
+.pcard:hover{background:var(--bg2,#f4f6f9)}
+.pcard.active{background:var(--primary-weak,#eef4ff)}
+.pcard .pcode{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--muted);flex:0 0 auto;letter-spacing:.2px}
+.pcard.active .pcode{color:var(--primary)}
+.pcard .pdash{color:var(--border-strong,#c7ccd4);flex:0 0 auto}
+.pcard .pname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcard.active .pname{color:var(--primary);font-weight:600}
 
 .info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 18px}
 @media (max-width:760px){.info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -467,13 +473,17 @@ th.sortable.on .sind{color:var(--primary)}
   margin-bottom:3px;display:flex;justify-content:space-between;gap:8px}
 
 /* 项目视图：左列表独立滚动、右详情固定 */
-.proj-split{display:grid;grid-template-columns:252px minmax(0,1fr);gap:16px;
+.proj-split{display:grid;grid-template-columns:var(--pl-w,252px) minmax(0,1fr);gap:16px;position:relative;
   height:calc(100vh - 208px);min-height:440px;align-items:stretch}
 .proj-split>div{min-width:0}
 .proj-split>.card{display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .proj-split>.card>.card-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:12px}
 .proj-split .plist{flex:1;min-height:0;overflow:auto;padding-right:3px;margin-right:-3px}
 .proj-detail-body{flex:1;min-height:0;overflow:auto}
+.pl-resizer{position:absolute;top:0;bottom:0;width:11px;left:241px;cursor:col-resize;z-index:6}
+.pl-resizer::after{content:"";position:absolute;left:5px;top:8px;bottom:8px;width:1px;
+  background:var(--border);transition:background .12s,width .12s}
+.pl-resizer:hover::after,.pl-resizer.dragging::after{background:var(--primary);width:2px;left:4.5px}
 .proj-split .card-head{flex:0 0 auto}
 .proj-split .table-wrap{max-height:none}
 
@@ -521,17 +531,18 @@ input:not([type=range]),select,textarea{border-radius:var(--radius-md)}
 body.pl-drawer-open{overflow:hidden}
 
 /* ===== 项目视图左栏：两级目录 ===== */
-.pl-group{margin-bottom:6px}
+.pl-group{margin-bottom:2px}
 .pl-group:last-child{margin-bottom:0}
-.pl-group-head{display:flex;align-items:center;gap:6px;width:100%;padding:7px 9px;box-sizing:border-box;
-  background:var(--bg2,#f5f7fa);border:1px solid var(--border);border-radius:6px;cursor:pointer;
-  font-size:12px;font-weight:600;color:var(--text2);line-height:1.2;text-align:left}
-.pl-group-head:hover{color:var(--primary);border-color:var(--primary)}
+.pl-group-head{display:flex;align-items:center;gap:6px;width:100%;padding:6px 8px;box-sizing:border-box;
+  background:transparent;border:0;border-radius:5px;cursor:pointer;
+  font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.3;text-align:left;letter-spacing:.2px}
+.pl-group-head:hover{color:var(--primary);background:var(--bg2,#f4f6f9)}
 .pl-group-head .chev{width:13px;height:13px;flex:0 0 13px;transition:transform .15s;opacity:.75}
 .pl-group.collapsed .pl-group-head .chev{transform:rotate(-90deg)}
 .pl-group-head .gn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl-group-head .cnt{font-weight:500;color:var(--muted);font-size:11px}
-.pl-group-body{display:flex;flex-direction:column;gap:7px;padding:7px 0 2px}
+.pl-group-body{display:flex;flex-direction:column;gap:1px;padding:2px 0 4px 9px;margin-left:7px;
+  border-left:1px solid var(--border)}
 .pl-group.collapsed .pl-group-body{display:none}
 
 /* ===== 设备使用看板 ===== */
@@ -540,6 +551,13 @@ body.pl-drawer-open{overflow:hidden}
 .ub-card .table-wrap table th,.ub-card .table-wrap table td{padding:7px 8px}
 
 /* ===== 仪表盘：12 列栅格 + 拖动缩放 ===== */
+.zoom-ctrl{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:6px;
+  overflow:hidden;background:#fff;flex:0 0 auto}
+.zoom-ctrl button{border:0;background:transparent;padding:4px 8px;font-size:11.5px;color:var(--text2);
+  cursor:pointer;line-height:1.5;font-family:inherit;transition:background .12s,color .12s}
+.zoom-ctrl button:hover{background:var(--bg2,#f4f6f9);color:var(--primary)}
+.zoom-ctrl button+button{border-left:1px solid var(--border)}
+#zoomLabel{min-width:46px;font-family:ui-monospace,Consolas,monospace;font-size:11px;font-weight:600}
 .cloud-badge{display:none;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
 .cloud-badge:not(:empty){display:inline-flex}
 .cloud-dot{width:6px;height:6px;border-radius:50%;flex:0 0 6px}
@@ -737,6 +755,11 @@ tr.hl-row>td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
           <input id="globalSearch" placeholder="搜索单据号 / 物料 / 备注">
         </div>
         <div id="userChip"></div>
+        <div class="zoom-ctrl" title="界面缩放 50%~200%（也可在设置页调整）">
+          <button data-act="zoomStep" data-v="-10" title="缩小">A−</button>
+          <button data-act="zoomReset" id="zoomLabel" title="恢复 100%">100%</button>
+          <button data-act="zoomStep" data-v="10" title="放大">A+</button>
+        </div>
         <span id="cloudBadge" class="cloud-badge"></span>
         <span id="topBackup"></span>
         <button class="btn btn-sm" id="resetBtn" data-act="resetDB" title="重置为演示数据">
@@ -2300,6 +2323,7 @@ const state = {
   pl:{kw:'', district:'all', owner:'all', unit:'all', status:'all'},
   plGroups:{},        // 项目视图左栏：行政区折叠状态（未记录时按默认）
   plDrawer:'',        // 项目清单右侧详情抽屉：项目 id
+  ubTab:'overview',   // 设备使用看板子页：overview / units
   plHighlight:null,
   tfProjectId:'',
   tfKw:'',
@@ -2443,6 +2467,7 @@ function render(){
   initDashGrid();
   syncPlDrawer();
   applyDisplay();
+  initProjSplit();
 
   renderNav();
   renderChrome();
@@ -3489,9 +3514,18 @@ function usageUnitStats(agg){
       }
     });
   });
+  /* 已出库领用划拨：目标项目不属于该单位时，单独计入该单位的项目用量 */
+  db.records.forEach(r => {
+    if(!r.alloc || !r.unitId) return;
+    const tp = db.projects.find(x => x.id === r.projectId);
+    if(tp && tp.unitId === r.unitId) return;
+    const key = r.unitId + '|' + r.materialId;
+    uHold[key] = (uHold[key] || 0) + (r.type === 'out' ? 1 : -1) * (Number(r.qty) || 0);
+  });
   const ids = [];
   Object.keys(byUnit).forEach(k => { if(ids.indexOf(k) < 0) ids.push(k); });
   Object.keys(uProj).forEach(k => { if(ids.indexOf(k) < 0) ids.push(k); });
+  db.records.forEach(r => { if(r.alloc && r.unitId && ids.indexOf(r.unitId) < 0) ids.push(r.unitId); });
   const units = ids.map(uid => {
     const st = byUnit[uid] || {docs:{}, mats:{}, qty:0};
     const u = uid ? (unitObj(uid) || {id:uid, name:'（单位已删除）', contacts:[]})
@@ -3574,7 +3608,13 @@ function viewUsageBoard(){
       }).join('')
     : '<div class="empty">还没有施工单位与领用记录</div>';
 
-  return '<div class="card"><div class="card-head">' +
+  const tab = state.ubTab === 'units' ? 'units' : 'overview';
+  const tabs = '<div class="tabs" style="margin-bottom:12px">' +
+    '<button data-act="ubTab" data-m="overview" class="' + (tab === 'overview' ? 'active' : '') + '">设备使用看板</button>' +
+    '<button data-act="ubTab" data-m="units" class="' + (tab === 'units' ? 'active' : '') + '">施工单位领用与结存</button>' +
+    '</div>';
+
+  const overviewCard = '<div class="card"><div class="card-head">' +
       '<div class="card-title">' + icon('layers') + '设备使用总览' +
         '<span class="cnt">共 ' + units.filter(x => x.uid).length + ' 家施工单位' +
           (units.some(x => !x.uid) ? ' + 未指定单位' : '') + ' · ' + totalDocs + ' 张出库单</span></div>' +
@@ -3583,10 +3623,13 @@ function viewUsageBoard(){
     '<div class="sub" style="padding:10px 16px;line-height:1.7">' +
       '剩余总数 = 期初库存 + 入库 − 出库（调拨不计入仓库口径）；项目使用数量 = 项目持有量（含项目间调拨净额）；' +
       '差异 = 出库总数 − 项目使用数量，用于发现「已出库但未落到项目」的物资。' +
-    '</div></div>' +
-    '<div class="card mt16"><div class="card-head"><div class="card-title">' + icon('users') +
-      '施工单位领用与结存<span class="cnt">按领用量降序 · 剩余 = 领用量 − 该单位负责园所的设备用量</span></div></div>' +
+    '</div></div>';
+
+  const unitsCard = '<div class="card"><div class="card-head"><div class="card-title">' + icon('users') +
+      '施工单位领用与结存<span class="cnt">按领用量降序 · 剩余 = 领用量 − 已使用（负责园所用量 + 划拨）</span></div></div>' +
       '<div class="card-body"><div class="ub-grid">' + cards + '</div></div></div>';
+
+  return tabs + (tab === 'units' ? unitsCard : overviewCard);
 }
 function exportUsageBoard(){
   if(!can('usageBoard','export')){ toast('无导出权限', 'bad'); return; }
@@ -3626,14 +3669,15 @@ function displayCfg(){
     font: typeof d.font === 'string' ? d.font : ''
   };
 }
-function fontCandidates(){
+function fontCandidates(sel){
   const set = new Set(WIN_FONTS);
+  if(sel) set.add(sel);                 // 已选字体必须留在候选里，刷新后下拉才能回显
   (state.fonts || []).forEach(f => { if(f) set.add(f); });
   return Array.from(set).sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
 }
 function fontOptions(sel){
   return '<option value="">系统默认（跟随界面）</option>' +
-    fontCandidates().map(f => '<option value="' + esc(f) + '"' + (sel === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('');
+    fontCandidates(sel).map(f => '<option value="' + esc(f) + '"' + (sel === f ? ' selected' : '') + '>' + esc(f) + '</option>').join('');
 }
 function applyDisplay(){
   const d = displayCfg();
@@ -3641,9 +3685,11 @@ function applyDisplay(){
   if(d.scale === 100) root.style.zoom = '';
   else root.style.zoom = String(d.scale / 100);
   document.body.style.fontFamily = d.font ? ('"' + d.font + '", system-ui, -apple-system, "Microsoft YaHei", sans-serif') : '';
+  const lab = document.getElementById('zoomLabel');
+  if(lab) lab.textContent = d.scale + '%';
 }
 function setDisplay(patch, silent){
-  if(!can('settings','edit')){ toast('无设置修改权限', 'bad'); return; }
+  /* 显示偏好不属于业务权限：只影响本机观感，任何人可调 */
   if(!db.settings.display) db.settings.display = {scale:100, font:''};
   Object.assign(db.settings.display, patch);
   saveDB();
@@ -4091,6 +4137,192 @@ function syncMatrixSticky(){
 }
 
 /* 项目页主体：汇总表 or 左列表 + 右详情 */
+/* ===== 已出库领用：从施工单位已领用额度划拨给项目（不动仓库库存） ===== */
+function nextAllocNo(date){
+  const p = 'LY-' + String(date).replace(/-/g, '');
+  const used = new Set(db.records.filter(r => r.docNo && r.docNo.indexOf(p) === 0).map(r => r.docNo));
+  let i = used.size + 1, no = p + '-' + String(i).padStart(3, '0');
+  while(used.has(no)){ i++; no = p + '-' + String(i).padStart(3, '0'); }
+  return no;
+}
+/* 单位口径：已领用（该单位非调拨出库）／已使用（负责项目持有 + 划拨给其它项目）／可领用 */
+function unitQuota(uid){
+  const agg = loadAgg();
+  const got = {}, used = {};
+  db.records.forEach(r => {
+    if(r.transfer || r.type !== 'out' || r.unitId !== uid) return;
+    got[r.materialId] = (got[r.materialId] || 0) + (Number(r.qty) || 0);
+  });
+  const myProjects = db.projects.filter(p => p.unitId === uid).map(p => p.id);
+  myProjects.forEach(id => {
+    const pref = id + '|';
+    for(const k in agg.pm){
+      if(k.indexOf(pref) !== 0) continue;
+      const mid = k.slice(pref.length);
+      used[mid] = (used[mid] || 0) + (agg.pm[k].out - agg.pm[k].in);
+    }
+  });
+  db.records.forEach(r => {
+    if(!r.alloc || r.unitId !== uid) return;
+    const tp = db.projects.find(x => x.id === r.projectId);
+    if(tp && tp.unitId === uid) return;         // 归属项目已体现在持有量里，避免重复
+    used[r.materialId] = (used[r.materialId] || 0) + (r.type === 'out' ? 1 : -1) * (Number(r.qty) || 0);
+  });
+  const mids = Array.from(new Set(Object.keys(got).concat(Object.keys(used))));
+  return mids.map(mid => {
+    const m = db.materials.find(x => x.id === mid) || {id:mid, name:'（物料已删除）', code:'', unit:''};
+    const g = got[mid] || 0, u = used[mid] || 0;
+    return {m, got:g, used:u, rest:g - u};
+  }).filter(x => x.got || x.used).sort((a, b) => b.rest - a.rest || b.got - a.got);
+}
+function modalAllocFromUnit(projectId){
+  const p = db.projects.find(x => x.id === projectId);
+  if(!p) return;
+  const units = ouList();
+  if(!units.length){
+    toast('还没有施工单位，请先到「基础档案 · 施工单位管理」新增', 'bad');
+    return;
+  }
+  const initUid = p.unitId || (units[0] || {}).id || '';
+  openModal('已出库领用 · ' + p.name,
+    '<div class="form-grid" style="grid-template-columns:1fr 1fr">' +
+      '<div class="field"><label>领用施工单位</label><select id="alloc-unit" data-change="allocUnit">' +
+        unitOptions(initUid) + '</select><span class="hint">从该单位已领用但未使用的设备中划拨</span></div>' +
+      '<div class="field"><label>领用日期</label><input type="date" id="alloc-date" value="' + today() + '"></div>' +
+    '</div>' +
+    '<div id="allocBody" class="mt12"></div>',
+    '<button class="btn" data-act="closeModal">取消</button>' +
+    '<button class="btn btn-primary" data-act="saveAlloc" data-id="' + p.id + '">确认领用</button>');
+  allocBodyRender(projectId, initUid);
+}
+function allocBodyRender(projectId, uid){
+  const box = document.getElementById('allocBody');
+  if(!box) return;
+  const rows = unitQuota(uid);
+  if(!rows.length){
+    box.innerHTML = '<div class="empty" style="padding:26px">该单位还没有可领用的设备（先做一次出库登记并选择该单位）</div>';
+    return;
+  }
+  box.innerHTML = '<div class="table-wrap" style="max-height:46vh"><table><thead><tr>' +
+      '<th>物料</th><th>单位</th><th class="num">已领用</th><th class="num">已使用</th>' +
+      '<th class="num">可领用</th><th class="num" style="width:110px">本次领用</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' +
+      '<td><div class="strong">' + esc(r.m.name) + '</div><div class="sub mono">' + esc(r.m.code || '') + '</div></td>' +
+      '<td>' + esc(r.m.unit || '—') + '</td>' +
+      '<td class="num">' + fmt(r.got) + '</td>' +
+      '<td class="num sub">' + fmt(r.used) + '</td>' +
+      '<td class="num strong"' + (r.rest <= 0 ? ' style="color:var(--muted)"' : '') + '>' + fmt(r.rest) + '</td>' +
+      '<td class="num"><input type="number" min="0" max="' + Math.max(0, r.rest) + '" step="1" ' +
+        'class="alloc-qty" data-mid="' + r.m.id + '" data-max="' + Math.max(0, r.rest) + '" ' +
+        'placeholder="0"' + (r.rest <= 0 ? ' disabled' : '') + ' style="width:96px;text-align:right"></td>' +
+    '</tr>').join('') +
+    '</tbody><tfoot><tr><td colspan="4" class="strong">合计</td>' +
+      '<td class="num strong">' + fmt(rows.reduce((n, r) => n + Math.max(0, r.rest), 0)) + '</td>' +
+      '<td class="num strong" id="allocSum">0</td></tr></tfoot></table></div>';
+}
+function allocSumRefresh(){
+  let n = 0;
+  $$('#allocBody .alloc-qty').forEach(inp => { n += Math.max(0, Number(inp.value) || 0); });
+  const el = document.getElementById('allocSum');
+  if(el) el.textContent = fmt(n);
+}
+function saveAlloc(projectId){
+  if(!can('outbound','create')){ toast('无出库登记权限', 'bad'); return; }
+  const p = db.projects.find(x => x.id === projectId);
+  if(!p) return;
+  const allocUnitId = ($('#alloc-unit') || {}).value || '';
+  if(!allocUnitId){ toast('请选择施工单位', 'bad'); return; }
+  const date = ($('#alloc-date') || {}).value || today();
+  const quota = {};
+  unitQuota(allocUnitId).forEach(r => { quota[r.m.id] = r.rest; });
+  const picked = [];
+  $$('#allocBody .alloc-qty').forEach(inp => {
+    const q = Math.max(0, Math.floor(Number(inp.value) || 0));
+    if(!q) return;
+    const mid = inp.dataset.mid;
+    const rest = quota[mid] === undefined ? Infinity : quota[mid];
+    if(q > rest){ inp.value = Math.max(0, rest); toast('「' + ((db.materials.find(m => m.id === mid) || {}).name || '') + '」超出可领用数量，已按上限调整', 'bad'); return; }
+    picked.push({mid, q});
+  });
+  if(!picked.length){ toast('请填写本次领用数量', 'bad'); return; }
+  const total = picked.reduce((n, x) => n + x.q, 0);
+  askConfirm({title:'确认领用', heading:'从「' + (unitName(allocUnitId) || '该单位') + '」划拨给本项目？', okText:'确认领用',
+    body:'项目 <b>' + esc(p.name) + '</b>，共 <b>' + picked.length + '</b> 种物料、数量合计 <b>' + fmt(total) + '</b>。<br>' +
+      '本操作只调整项目持有量与单位结存，<b>不改变仓库库存</b>，也不会新增出入库台账。',
+    onOk(){
+      const docNo = nextAllocNo(date);
+      const by = (typeof currentUser === 'function' && currentUser() ? (currentUser().name || currentUser().account) : '') || '';
+      picked.forEach(x => {
+        db.records.push({
+          id: uid('r'), docNo, date, type: 'out', transfer: true, alloc: true,
+          projectId: p.id, unitId: allocUnitId, warehouseId: '', materialId: x.mid, qty: x.q,
+          operator: by, remark: '已出库领用划拨（来源单位：' + (unitName(allocUnitId) || '') + '）'
+        });
+      });
+      saveDB();
+      logAct('项目领用','新增','已出库领用划拨 ' + docNo + '，项目：' + p.name + '，单位：' + (unitName(allocUnitId) || '') + '，数量 ' + total);
+      closeModal(); render();
+      toast('已领用 ' + picked.length + ' 种物料，合计 ' + fmt(total), 'ok');
+    }});
+}
+
+/* ===== 项目视图分栏宽度：拖拽右缘调整，存 localStorage ===== */
+const PLW_KEY = 'wms_proj_split_w';
+const PLW_MIN = 200, PLW_MAX = 520, PLW_DEF = 252;
+function projSplitWidth(){
+  let v = NaN;
+  try{ v = Number(localStorage.getItem(PLW_KEY)); }catch(e){}
+  if(!isFinite(v) || v < PLW_MIN || v > PLW_MAX) v = PLW_DEF;
+  return Math.round(v);
+}
+function applyProjSplitWidth(w){
+  const box = document.querySelector('.proj-split');
+  if(!box) return;
+  box.style.setProperty('--pl-w', w + 'px');
+  const r = box.querySelector('.pl-resizer');
+  if(r) r.style.left = (w - 5) + 'px';
+}
+function saveProjSplitWidth(w){
+  try{ localStorage.setItem(PLW_KEY, String(Math.round(w))); }catch(e){}
+}
+function initProjSplit(){
+  const box = document.querySelector('.proj-split');
+  if(!box) return;
+  applyProjSplitWidth(projSplitWidth());
+  const r = box.querySelector('.pl-resizer');
+  if(!r || r.dataset.bound) return;
+  r.dataset.bound = '1';
+  r.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = projSplitWidth();
+    let cur = startW;
+    r.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const move = function(ev){
+      cur = Math.min(PLW_MAX, Math.max(PLW_MIN, startW + (ev.clientX - startX)));
+      applyProjSplitWidth(cur);
+    };
+    const up = function(){
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      r.classList.remove('dragging');
+      saveProjSplitWidth(cur);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+  r.addEventListener('dblclick', function(){
+    applyProjSplitWidth(PLW_DEF);
+    saveProjSplitWidth(PLW_DEF);
+  });
+}
+
 function projectBodyHtml(){
   const agg = loadAgg();
   /* 按项目查看的左栏、跨项目汇总的项目列，统一按持有量倒序（非空在前） */
@@ -4134,15 +4366,12 @@ function projectBodyHtml(){
   const curP = db.projects.find(x => x.id === state.projectId);
   const curG = curP ? (String(curP.district || '').trim() || '未分区') : '';
   const plCard = p => {
-    const st = projectTotal(agg, p.id);
-    const kinds = new Set(db.records.filter(r => r.projectId === p.id).map(r => r.materialId)).size;
     const isActive = p.id === state.projectId;
-    return '<div class="pcard' + (isActive ? ' active' : '') + '" data-act="selProject" data-id="' + p.id + '">' +
-      '<div class="pn"><span class="dotc" style="background:' + pColor(p.id) + '"></span>' + esc(p.name) + '</div>' +
-      '<div class="pm"><span class="mono">' + esc(p.code || '') + '</span><span>' + esc(p.owner || '未指定负责人') + '</span>' +
-        '<span>' + kinds + ' 种物料</span><span>现有 ' + fmt(st) + '</span></div>' +
-      (canMod('projectTransfer','view') ? '<button class="pcard-go" data-act="gotoTransfer" data-id="' + p.id + '" title="带着该项目去出库物资调拨">' + icon('swap') + '调拨</button>' : '') +
-      '</div>';
+    return '<div class="pcard' + (isActive ? ' active' : '') + '" data-act="selProject" data-id="' + p.id + '"' +
+      ' title="' + esc((p.code || '') + ' - ' + p.name) + '">' +
+      '<span class="pcode">' + esc(p.code || '—') + '</span>' +
+      '<span class="pdash">-</span>' +
+      '<span class="pname">' + esc(p.name) + '</span></div>';
   };
   const list = gNames.map((g, gi) => {
     const open = (state.plGroups && typeof state.plGroups[g] === 'boolean')
@@ -4190,7 +4419,8 @@ function projectBodyHtml(){
         (can('projects','export') ? '<button class="btn btn-sm" data-act="exportProject" data-id="' + p.id + '" title="导出该项目物料明细">' + icon('download') + '导出</button>' : '') +
         (can('projects','edit') ? '<button class="btn btn-sm btn-ghost" data-act="editProject" data-id="' + p.id + '">' + icon('edit') + '编辑</button>' : '') +
         (can('projects','delete') ? '<button class="btn btn-sm btn-ghost" style="color:var(--red)" data-act="delProject" data-id="' + p.id + '">' + icon('trash') + '删除</button>' : '') +
-        (can('outbound','create') ? '<button class="btn btn-sm" data-act="newOut" data-id="' + p.id + '">' + icon('out') + '项目领用</button>' : '') +
+        (can('outbound','create') ? '<button class="btn btn-sm btn-primary" data-act="newOut" data-id="' + p.id + '" title="到出库登记开单，仓库发货">' + icon('out') + '仓库领用</button>' : '') +
+        (can('outbound','create') ? '<button class="btn btn-sm" data-act="allocFromUnit" data-id="' + p.id + '" title="从施工单位已领用设备中划拨给本项目">' + icon('swap') + '已出库领用</button>' : '') +
         (can('inbound','create') ? '<button class="btn btn-sm" data-act="newIn" data-id="' + p.id + '">' + icon('back') + '返回入库</button>' : '') + '</div></div>' +
       '<div class="proj-detail-body">' +
         '<div class="card-body"><div class="info-grid">' +
@@ -4216,7 +4446,8 @@ function projectBodyHtml(){
         '</div>' +
       '</div></div>';
 
-  return '<div class="proj-split mt16">' + leftCard + rightCard + '</div>';
+  return '<div class="proj-split mt16">' + leftCard + rightCard +
+    '<div class="pl-resizer" data-no-sel title="拖动调整列表宽度，双击恢复默认"></div></div>';
 }
 
 function summaryMatrix(agg, projects){
@@ -5833,7 +6064,7 @@ function viewSettings(){
           '· 账号停用后无法登录，已有会话在下次操作时失效；<br>' +
           '· 所有写入操作记录操作日志，可在「操作日志」中追溯；<br>' +
           '· 数据与备份均保存在本机浏览器，建议定期「下载当前数据」留档。' +
-        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.20</div></div><div><div class="k">存储方式</div><div class="v">' +
+        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.21</div></div><div><div class="k">存储方式</div><div class="v">' +
           (cloudEnabled() ? '云端共享（CloudBase PG）' : 'localStorage') + '</div></div>' +
         (cloudEnabled()
           ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap">' +
@@ -7330,6 +7561,15 @@ document.addEventListener('click', e => {
     return;
   }
 
+  if(act === 'zoomStep'){
+    const step = Number(t.dataset.v) || 0;
+    setDisplay({scale: displayCfg().scale + step}, true);
+    return;
+  }
+  if(act === 'zoomReset'){ setDisplay({scale:100}, true); render(); return; }
+  if(act === 'ubTab'){ state.ubTab = t.dataset.m === 'units' ? 'units' : 'overview'; render(); return; }
+  if(act === 'allocFromUnit'){ modalAllocFromUnit(id); return; }
+  if(act === 'saveAlloc'){ saveAlloc(t.dataset.id); return; }
   if(act === 'cloudPullNow'){ cloudManualRefresh(); return; }
   if(act === 'cloudHistory'){ modalCloudHistory(); return; }
   if(act === 'cloudConflictModal'){ modalCloudConflict(); return; }
@@ -7478,6 +7718,11 @@ document.addEventListener('change', e => {
     setDisplay({scale: Math.min(200, Math.max(50, Number(t.value) || 100))});
     return;
   }
+  if(act === 'allocUnit'){
+    const pid = (document.querySelector('[data-act="saveAlloc"]') || {}).dataset;
+    if(pid && pid.id) allocBodyRender(pid.id, t.value);
+    return;
+  }
   if(act === 'dpFont'){ setDisplay({font: t.value}); return; }
   if(act === 'plStatus'){ state.pl.status = t.value; state.plHighlight = null; refreshPlBody(); return; }
   if(act === 'lf'){ state.logFilters[key] = t.value; state.logPage = 1; refreshLogs(); return; }
@@ -7587,6 +7832,14 @@ document.addEventListener('dragend', () => { dragMid = null; clearDragMarks(); }
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if(t.classList && t.classList.contains('alloc-qty')){
+    const max = Number(t.dataset.max || 0);
+    let v = Math.max(0, Math.floor(Number(t.value) || 0));
+    if(max >= 0 && v > max) v = max;
+    if(String(v) !== t.value) t.value = v;
+    allocSumRefresh();
+    return;
+  }
   if(t.id === 'projInput-out' || t.id === 'projInput-in'){
     openProjectCombo(t.dataset.type, t.value);
     return;
