@@ -4,7 +4,7 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const FILES = ['t1.js', 't2.js', 't3.js', 't4.js', 't5.js', 't6.js', 't7.js', 't8.js', 't9.js', 't10.js', 't11.js', 't12.js', 't13.js', 't14.js', 't15.js', 't16.js', 't17.js', 't18.js', 't19.js', 't20.js', 't21.js', 't22.js', 't23.js', 't24.js', 't25.js', 't26.js'];
+const FILES = ['t1.js', 't2.js', 't3.js', 't4.js', 't5.js', 't6.js', 't7.js', 't8.js', 't9.js', 't10.js', 't11.js', 't12.js', 't13.js', 't14.js', 't15.js', 't16.js', 't17.js', 't18.js', 't19.js', 't20.js', 't21.js', 't22.js', 't23.js', 't24.js', 't25.js', 't26.js', 't27.js'];
 
 /* 每个脚本覆盖的范围，便于失败时快速定位 */
 const SCOPE = {
@@ -33,7 +33,8 @@ const SCOPE = {
   't23.js': '云端乐观锁（rev 条件更新 / 冲突检测 / 冲突阻塞推送 / 强制覆盖）与历史快照 UI',
   't24.js': '项目视图平铺左栏与拖拽调宽、已出库领用划拨、看板双子页、顶栏缩放',
   't25.js': '游客权限跟随「项目只读」角色（含看板）、物料明细只显示名称、批量选择物料',
-  't26.js': '移动端适配（抽屉菜单、单列布局、触摸尺寸、顶栏精简）'
+  't26.js': '移动端适配（抽屉菜单、单列布局、触摸尺寸、顶栏精简）',
+  't27.js': '项目领用记录（列表 / 全字段编辑 / 撤销归还与库存联动）'
 };
 
 let failed = 0;

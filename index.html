@@ -4332,6 +4332,153 @@ function syncMatrixSticky(){
 }
 
 /* 项目页主体：汇总表 or 左列表 + 右详情 */
+/* ===== 项目领用记录（仓库领用 / 已出库领用） ===== */
+function issueKindOf(r){
+  return (r.transfer && r.alloc)
+    ? { key:'alloc', label:'已出库领用', cls:'badge-muted' }
+    : { key:'stock', label:'仓库领用', cls:'badge-in' };
+}
+function projectIssueList(p){
+  return db.records
+    .filter(r => r.type === 'out' && r.projectId === p.id)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.id).localeCompare(String(a.id)));
+}
+function projectIssueHtml(p){
+  const list = projectIssueList(p);
+  const canEdit = can('outbound', 'edit'), canDel = can('outbound', 'delete');
+  const head = '<div class="row" style="padding:13px 16px 8px;border-top:1px solid var(--border);gap:8px;flex-wrap:wrap">' +
+      '<b style="font-size:12.5px">领用记录</b>' +
+      '<span class="sub" style="font-size:11.5px">共 ' + list.length + ' 条 · 仓库领用扣仓库库存，已出库领用从施工单位额度划拨</span>' +
+    '</div>';
+  if(!list.length){
+    return head + '<div class="empty" style="padding:18px">还没有领用记录，点上方「仓库领用」或「已出库领用」开始</div>';
+  }
+  const rows = list.map(r => {
+    const m = db.materials.find(x => x.id === r.materialId) || { name:'（物料已删除）', unit:'' };
+    const w = db.warehouses.find(x => x.id === r.warehouseId);
+    const k = issueKindOf(r);
+    return '<tr>' +
+      '<td class="mono">' + esc(r.date) + '</td>' +
+      '<td class="mono">' + esc(r.docNo) + '</td>' +
+      '<td><span class="badge ' + k.cls + '">' + k.label + '</span></td>' +
+      '<td>' + esc(m.name) + '</td>' +
+      '<td class="num strong">' + fmt(r.qty) + ' <span class="sub">' + esc(m.unit || '') + '</span></td>' +
+      '<td>' + esc(w ? w.name : '—') + '</td>' +
+      '<td>' + esc(unitName(r.unitId) || '—') + '</td>' +
+      '<td class="sub">' + esc(r.operator || '—') + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="editIssue" data-id="' + r.id + '" title="编辑这条领用">' + icon('edit') + '</button>' : '') +
+        (canDel ? '<button class="btn btn-sm btn-ghost" style="color:var(--red)" data-act="delIssue" data-id="' + r.id + '" title="撤销领用并归还">' + icon('trash') + '</button>' : '') +
+      '</td></tr>';
+  }).join('');
+  return head + '<div class="table-wrap" style="padding:0 16px 14px"><table><thead><tr>' +
+      '<th>日期</th><th>单号</th><th>方式</th><th>物料</th><th class="num">数量</th>' +
+      '<th>仓库</th><th>施工单位</th><th>经办人</th><th style="width:88px"></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+function modalEditIssue(recId){
+  const r = db.records.find(x => x.id === recId);
+  if(!r){ toast('记录不存在', 'bad'); return; }
+  if(!can('outbound', 'edit')){ toast('无编辑领用记录权限', 'bad'); return; }
+  const k = issueKindOf(r);
+  const matOpts = db.materials.map(m => '<option value="' + m.id + '"' +
+    (r.materialId === m.id ? ' selected' : '') + '>' + esc(m.name) + '</option>').join('');
+  const whOpts = db.warehouses.map(w => '<option value="' + w.id + '"' +
+    (r.warehouseId === w.id ? ' selected' : '') + '>' + esc(w.name) + '</option>').join('');
+  openModal('编辑领用记录 · ' + k.label,
+    '<div class="info-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:12px">' +
+      '<div class="info-item"><div class="k">单号</div><div class="v mono">' + esc(r.docNo) + '</div></div>' +
+      '<div class="info-item"><div class="k">领用方式</div><div class="v">' + k.label + '</div></div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+      '<div class="field"><label>物料 / 设备</label><select id="ie-mat">' + matOpts + '</select></div>' +
+      '<div class="field"><label>数量</label><input type="number" min="1" step="1" id="ie-qty" value="' + (Number(r.qty) || 0) + '">' +
+        '<span class="hint">' + (r.transfer ? '不能超过该单位可领用量' : '调整后仓库库存不能为负') + '</span></div>' +
+      '<div class="field"><label>领用日期</label><input type="date" id="ie-date" value="' + esc(r.date) + '"></div>' +
+      '<div class="field"><label>仓库</label><select id="ie-wh"' + (r.transfer ? ' disabled' : '') + '>' + whOpts + '</select>' +
+        '<span class="hint">' + (r.transfer ? '已出库领用不经过仓库' : '撤销时退回该仓库') + '</span></div>' +
+      '<div class="field"><label>施工单位</label><select id="ie-unit">' + unitOptions(r.unitId || '') + '</select></div>' +
+      '<div class="field"><label>经办人</label><input id="ie-op" value="' + esc(r.operator || '') + '"></div>' +
+      '<div class="field" style="grid-column:1 / -1"><label>备注</label><input id="ie-remark" value="' + esc(r.remark || '') + '"></div>' +
+    '</div>',
+    '<button class="btn" data-act="closeModal">取消</button>' +
+    '<button class="btn btn-primary" data-act="saveIssue" data-id="' + r.id + '">保存修改</button>');
+}
+function saveIssueEdit(recId){
+  const r = db.records.find(x => x.id === recId);
+  if(!r) return;
+  if(!can('outbound', 'edit')){ toast('无编辑领用记录权限', 'bad'); return; }
+  const mid = ($('#ie-mat') || {}).value || '';
+  const qty = Math.floor(Number(($('#ie-qty') || {}).value) || 0);
+  if(!mid){ toast('请选择物料', 'bad'); return; }
+  if(qty <= 0){ toast('数量必须大于 0', 'bad'); return; }
+  const oldMid = r.materialId, oldQty = Number(r.qty) || 0;
+  const m = db.materials.find(x => x.id === mid) || {};
+
+  if(!r.transfer){
+    const agg = loadAgg();
+    const after = (mid === oldMid) ? (stockOf(agg, mid) + oldQty - qty) : (stockOf(agg, mid) - qty);
+    if(after < 0){
+      toast('调整后「' + (m.name || '') + '」仓库库存将为负（' + fmt(after) + '），请先核对其它单据', 'bad');
+      return;
+    }
+  }else{
+    const uid = ($('#ie-unit') || {}).value || '';
+    if(uid){
+      const q = unitQuota(uid).find(x => x.m.id === mid);
+      const allow = (q ? q.rest : 0) + (mid === oldMid ? oldQty : 0);
+      if(qty > allow){
+        toast('超出「' + (unitName(uid) || '该单位') + '」可领用量（' + fmt(allow) + '）', 'bad');
+        return;
+      }
+    }
+  }
+
+  r.materialId = mid;
+  r.qty = qty;
+  r.date = ($('#ie-date') || {}).value || r.date;
+  if(!r.transfer){
+    const wh = ($('#ie-wh') || {}).value;
+    if(wh) r.warehouseId = wh;
+  }
+  r.unitId = ($('#ie-unit') || {}).value || '';
+  r.operator = (($('#ie-op') || {}).value || '').trim();
+  r.remark = (($('#ie-remark') || {}).value || '').trim();
+
+  saveDB();
+  logAct('项目领用', '编辑', '修改领用记录 ' + r.docNo + ' · ' + (m.name || '') + ' · ' + qty);
+  closeModal();
+  render();
+  toast('领用记录已更新，库存与看板已同步', 'ok');
+}
+function delIssueRecord(recId){
+  const r = db.records.find(x => x.id === recId);
+  if(!r) return;
+  if(!can('outbound', 'delete')){ toast('无撤销领用权限', 'bad'); return; }
+  const m = db.materials.find(x => x.id === r.materialId) || { name:'（物料已删除）' };
+  const w = db.warehouses.find(x => x.id === r.warehouseId);
+  const sameDoc = db.records.filter(x => x.docNo === r.docNo).length;
+  const back = r.transfer
+    ? '数量 <b>' + fmt(r.qty) + '</b> 退回「' + esc(unitName(r.unitId) || '施工单位') + '」的可用额度'
+    : '数量 <b>' + fmt(r.qty) + '</b> 退回仓库「' + esc(w ? w.name : '原仓库') + '」';
+  if(!r.transfer){
+    const agg = loadAgg();
+    if(stockOf(agg, r.materialId) < 0) { /* 回滚只会增加库存，无需拦截 */ }
+  }
+  askConfirm({ title:'撤销领用', heading:'确认撤销这条领用记录？', danger:true, okText:'撤销并归还',
+    body:'单据 <b class="mono">' + esc(r.docNo) + '</b> · ' + esc(m.name) + ' · <b>' + fmt(r.qty) + '</b><br>' +
+      '撤销后 ' + back + '，项目持有量与设备使用看板同步回滚。' +
+      (sameDoc > 1 ? '<br>该单还有另外 <b>' + (sameDoc - 1) + '</b> 行，本次只撤销这一行。' : ''),
+    onOk(){
+      db.records = db.records.filter(x => x.id !== recId);
+      saveDB();
+      logAct('项目领用', '删除', '撤销领用 ' + r.docNo + ' · ' + (m.name || '') + ' · ' + r.qty +
+        (r.transfer ? '（退回单位额度）' : '（退回仓库）'));
+      render();
+      toast('已撤销，' + (r.transfer ? '额度已退回单位' : '库存已退回仓库'), 'ok');
+    }});
+}
+
 /* ===== 已出库领用：从施工单位已领用额度划拨给项目（不动仓库库存） ===== */
 function nextAllocNo(date){
   const p = 'LY-' + String(date).replace(/-/g, '');
@@ -4639,6 +4786,7 @@ function projectBodyHtml(){
             '<td class="num strong" style="color:var(--primary)">-' + fmt(sumOut) + '</td><td></td></tr></tfoot></table></div>'
           : '<div class="empty">该项目暂无领用或退回记录</div>') +
         '</div>' +
+        projectIssueHtml(p) +
       '</div></div>';
 
   return '<div class="proj-split mt16">' + leftCard + rightCard +
@@ -6259,7 +6407,7 @@ function viewSettings(){
           '· 账号停用后无法登录，已有会话在下次操作时失效；<br>' +
           '· 所有写入操作记录操作日志，可在「操作日志」中追溯；<br>' +
           '· 数据与备份均保存在本机浏览器，建议定期「下载当前数据」留档。' +
-        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.23</div></div><div><div class="k">存储方式</div><div class="v">' +
+        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.24</div></div><div><div class="k">存储方式</div><div class="v">' +
           (cloudEnabled() ? '云端共享（CloudBase PG）' : 'localStorage') + '</div></div>' +
         (cloudEnabled()
           ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap">' +
@@ -7770,6 +7918,9 @@ document.addEventListener('click', e => {
   }
   if(act === 'zoomReset'){ setDisplay({scale:100}, true); render(); return; }
   if(act === 'ubTab'){ state.ubTab = t.dataset.m === 'units' ? 'units' : 'overview'; render(); return; }
+  if(act === 'editIssue'){ modalEditIssue(id); return; }
+  if(act === 'saveIssue'){ saveIssueEdit(id); return; }
+  if(act === 'delIssue'){ delIssueRecord(id); return; }
   if(act === 'allocFromUnit'){ modalAllocFromUnit(id); return; }
   if(act === 'saveAlloc'){ saveAlloc(t.dataset.id); return; }
   if(act === 'cloudPullNow'){ cloudManualRefresh(); return; }
