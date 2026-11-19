@@ -487,6 +487,16 @@ th.sortable.on .sind{color:var(--primary)}
 .proj-split .card-head{flex:0 0 auto}
 .proj-split .table-wrap{max-height:none}
 
+/* ===== 批量选择设备 ===== */
+.pm-list{max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:6px;margin-top:10px}
+.pm-item{display:flex;align-items:center;gap:9px;padding:8px 11px;cursor:pointer;font-size:12.5px;
+  border-bottom:1px solid var(--border);line-height:1.5}
+.pm-item:last-child{border-bottom:0}
+.pm-item:hover{background:var(--bg2,#f4f6f9)}
+.pm-item input[type=checkbox]{width:15px;height:15px;flex:0 0 15px;margin:0;accent-color:var(--primary);cursor:pointer}
+.pm-item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-item input:disabled+.nm{color:var(--muted)}
+
 /* ===== v4.19 视觉统一（shadcn/ui：语义 token + 单一圆角源 + 克制动效） ===== */
 :root{
   --radius-sm:calc(var(--radius) * 0.6);
@@ -725,10 +735,110 @@ tr.hl-row>td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
   .mod-grid{grid-template-columns:1fr}
   .matrix-wrap{max-height:none}
 }
+
+/* ===== 移动端（≤768px）：侧栏抽屉 + 单列布局 + 触摸优化 ===== */
+.nav-toggle{display:none;align-items:center;justify-content:center;width:34px;height:34px;flex:0 0 34px;
+  border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);cursor:pointer;
+  padding:0;transition:color .12s,border-color .12s}
+.nav-toggle svg{width:18px;height:18px}
+.nav-toggle:hover{color:var(--primary);border-color:var(--primary)}
+.nav-mask{display:none}
+
+@media (max-width:1200px){
+  .topbar-right{flex:0 0 auto}
+  .user-chip{flex:0 0 auto;white-space:nowrap}
+  .topbar .gsearch{min-width:0}
+}
+@media (max-width:768px){
+  .nav-toggle{display:inline-flex}
+  .app{display:block;min-height:100dvh}
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:264px;max-width:84vw;z-index:920;height:100dvh;
+    transform:translateX(-102%);transition:transform .22s cubic-bezier(.4,0,.2,1);will-change:transform}
+  body.nav-open .sidebar{transform:none;box-shadow:12px 0 32px -12px rgba(16,24,40,.3)}
+  .nav-mask{display:block;position:fixed;inset:0;background:rgba(16,24,40,.42);z-index:910;
+    opacity:0;pointer-events:none;transition:opacity .2s}
+  body.nav-open .nav-mask{opacity:1;pointer-events:auto}
+
+  /* 抽屉里恢复完整文字菜单（覆盖 ≤900px 的图标条模式） */
+  .sidebar{width:264px;flex:0 0 264px}
+  .brand-name,.brand-sub,.nav-group,.nav-item span,.side-foot{display:block}
+  .nav-item{justify-content:flex-start;padding:10px 10px;gap:9px}
+  .nav-item span{display:inline-block;min-width:0}
+
+  .main{width:100%}
+  .topbar{height:56px;padding:0 12px;gap:8px;position:sticky;top:0;z-index:100}
+  .topbar h1{font-size:15px;line-height:1.2}
+  .topbar .desc{display:none}
+  .topbar .gsearch{display:none}
+  .topbar-right{gap:7px}
+  .zoom-ctrl{display:none}
+  .cloud-badge{font-size:11px}
+  #topBackup,#resetBtn{display:none}
+
+  .view{padding:12px 12px calc(40px + env(safe-area-inset-bottom, 0px))}
+  .card{border-radius:8px}
+  .card-head{padding:10px 12px;min-height:auto;flex-wrap:wrap;gap:8px}
+  .card-body{padding:12px}
+  .card-title{font-size:13px;white-space:normal;line-height:1.35}
+  .card-title .cnt{font-size:11.5px}
+
+  .form-grid{grid-template-columns:1fr}
+  .info-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 12px}
+  .toolbar{flex-wrap:wrap;gap:8px}
+  .toolbar select,.toolbar .gsearch{width:100% !important}
+
+  /* 弹窗铺满可用宽度 */
+  .mask{padding:12px;align-items:flex-start}
+  .modal{width:100%;max-width:none;max-height:calc(100dvh - 24px);display:flex;flex-direction:column}
+  .modal-body{max-height:calc(100dvh - 130px);padding:14px}
+  .modal-head{padding:12px 14px}
+  .modal-foot{padding:10px 14px;flex-wrap:wrap;gap:8px}
+  .modal-foot .btn{flex:1 1 auto}
+
+  /* 表格：横向滚动 + 触摸惯性 */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-wrap>table{width:max-content;min-width:100%}
+
+  /* 项目视图：上下堆叠、隐藏拖拽手柄 */
+  .proj-split{grid-template-columns:minmax(0,1fr);height:auto;min-height:0;gap:12px}
+  .proj-split .plist{max-height:220px}
+  .proj-split .proj-detail-body{max-height:none;overflow:visible}
+  .pl-resizer{display:none}
+
+  /* 仪表盘：12 列栅格改单列，卡片占满一行，禁用手柄 */
+  .dash-grid{grid-template-columns:minmax(0,1fr) !important;grid-auto-rows:auto !important;
+    grid-auto-flow:row !important;gap:12px}
+  .dash-grid>.dash-card{grid-column:1 / -1 !important;grid-row:auto !important;min-height:0}
+  .dash-grip{display:none !important}
+  .dash-resize,.dash-resizer{display:none !important}
+
+  /* 看板卡片单列 */
+  .ub-grid{grid-template-columns:1fr}
+
+  /* 物料明细：名称一行，数量与删除同排，备注换行 */
+  .line{grid-template-columns:minmax(0,1fr) 92px 30px;gap:8px}
+  .line>div:nth-child(1){grid-column:1;grid-row:1}
+  .line>div:nth-child(2){grid-column:2;grid-row:1}
+  .line>div:nth-child(3){grid-column:1 / span 3;grid-row:2}
+  .line>button{grid-column:3;grid-row:1}
+
+  /* 触摸友好：输入框 16px 防 iOS 缩放，按钮最小高度 */
+  input:not([type=range]):not([type=checkbox]),select,textarea{font-size:16px}
+  .btn{min-height:34px;padding-left:11px;padding-right:11px}
+  .icon-btn{min-width:34px;min-height:34px}
+  .nav-item{padding:10px 10px;font-size:13px}
+  .tabs{display:flex;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs button{flex:0 0 auto;padding:8px 12px;font-size:12px;white-space:nowrap}
+
+  .pm-item{padding:11px 12px}
+  .pm-list{max-height:44vh}
+  .sum-row{font-size:12.5px}
+}
 </style>
 </head>
 <body>
 <div class="app">
+  <div class="nav-mask" data-act="navToggle" aria-hidden="true"></div>
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">
@@ -745,6 +855,9 @@ tr.hl-row>td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
 
   <main class="main">
     <header class="topbar">
+      <button class="nav-toggle" data-act="navToggle" aria-label="打开菜单" title="菜单">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <div>
         <h1 id="pageTitle">库存仪表盘</h1>
         <div class="desc" id="pageDesc"></div>
@@ -930,12 +1043,33 @@ function canMod(mod, act){
 function canWriteMod(mod){ return ['create','edit','delete','restore','import'].some(a => canMod(mod, a)); }
 function pageCan(pageId, act){ return canMod(pageId, act); }
 const GUEST_PERMS = (() => {
-  // 打开即是「项目只读」：总览 / 库存数据 / 基础档案 / 项目（含调拨查看）/ 查询，全部只读
+  // 兜底基线：总览 / 库存数据 / 基础档案 / 项目（含调拨查看）/ 查询，全部只读
   const p = {};
   ['dashboard','stock','materialDetail','materials','warehouses',
    'projectList','projects','projectTransfer','records'].forEach(id => { p[id] = ['view']; });
   return p;
 })();
+/* 未登录（游客）的实际权限 = 「项目只读」角色配的只读权限。
+   以前直接返回硬编码 GUEST_PERMS，导致管理员给该角色勾选新模块（如设备使用看板）
+   后游客仍看不到。这里按角色的 perms 派生，且**只继承 view**，
+   避免未登录状态下意外获得写权限。角色缺失或无任何 view 时回落到基线。 */
+let _guestCache = { key:'', perms:null };
+function guestPerms(){
+  const r = (db.roles || []).find(x => x.id === 'r_viewer');
+  const src = (r && r.perms && typeof r.perms === 'object') ? r.perms : null;
+  const key = src ? JSON.stringify(src) : 'none';
+  if(_guestCache.key === key && _guestCache.perms) return _guestCache.perms;
+  const out = {};
+  if(src){
+    Object.keys(src).forEach(k => {
+      const acts = src[k];
+      if(Array.isArray(acts) && acts.indexOf('view') >= 0) out[k] = ['view'];
+    });
+  }
+  const res = Object.keys(out).length ? out : GUEST_PERMS;
+  _guestCache = { key, perms:res };
+  return res;
+}
 const DATA_MODULES = MODULES.filter(m => !['accounts','logs','backups','settings'].includes(m.id)).map(m => m.id);
 function allPerms(){
   const p = {};
@@ -1060,7 +1194,7 @@ function roleOf(u){
 let _permCache = {key:'', perms:null};
 function invalidatePerms(){ _permCache = {key:'', perms:null}; }
 function permsOf(u){
-  if(!u){ return GUEST_PERMS; }
+  if(!u){ return guestPerms(); }
   const key = u.id + '|' + u.roleId + '|' + (db.roles.length);
   if(_permCache.key === key && _permCache.perms) return _permCache.perms;
   const r = roleOf(u);
@@ -3117,7 +3251,8 @@ function viewMovement(type){
           '<div class="row" style="margin-bottom:2px"><b style="font-size:12.5px">物料明细</b>' +
             '<span class="sub">' + (isIn ? '入库数量累加到仓库库存' : '出库数量从仓库库存扣减，超出可用量会被拦截') + '</span>' +
             '<div class="spacer"></div>' +
-            '<button class="btn btn-sm" data-act="addLine" data-type="' + type + '">' + icon('plus') + '添加物料行</button></div>' +
+            '<button class="btn btn-sm" data-act="addLine" data-type="' + type + '">' + icon('plus') + '添加一行</button>' +
+            '<button class="btn btn-sm" data-act="pickMaterials" data-type="' + type + '">' + icon('list') + '批量选择</button></div>' +
           '<div id="lines-' + type + '">' + lines + '</div>' +
         '</div>' +
       '</div>' +
@@ -3159,10 +3294,57 @@ function lineHintInfo(type, l){
   return {text:'仓库现有 ' + fmt(stock) + ' ' + mat.unit, bad:false};
 }
 
+/* 批量选择物料：勾选多个一次成行，已在明细里的自动置灰跳过 */
+function pmRowsHtml(type, kw){
+  const q = String(kw || '').trim().toLowerCase();
+  const exist = new Set(draft[type].lines.map(l => l.materialId).filter(Boolean));
+  const list = db.materials.filter(m => !q
+    || String(m.name || '').toLowerCase().indexOf(q) >= 0
+    || String(m.code || '').toLowerCase().indexOf(q) >= 0);
+  if(!list.length) return '<div class="empty" style="padding:22px">没有匹配的设备</div>';
+  return list.map(m => '<label class="pm-item">' +
+      '<input type="checkbox" value="' + m.id + '"' + (exist.has(m.id) ? ' disabled' : '') + '>' +
+      '<span class="nm">' + esc(m.name) + '</span>' +
+      (exist.has(m.id) ? '<span class="sub">已在明细</span>' : '') +
+    '</label>').join('');
+}
+function modalPickMaterials(type){
+  if(!can(type === 'in' ? 'inbound' : 'outbound', 'create')){ toast('无登记权限', 'bad'); return; }
+  if(!db.materials.length){ toast('还没有设备档案，请先到「物料管理」新增', 'bad'); return; }
+  openModal('批量选择设备',
+    '<div class="gsearch" style="width:100%">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>' +
+      '<input id="pmKw" placeholder="搜索设备名称" autocomplete="off">' +
+    '</div>' +
+    '<div id="pmList" class="pm-list">' + pmRowsHtml(type, '') + '</div>' +
+    '<div class="sub mt8">勾选多个设备后一次添加；已在明细中的会自动跳过。</div>',
+    '<button class="btn" data-act="closeModal">取消</button>' +
+    '<button class="btn btn-primary" data-act="pmConfirm" data-type="' + type + '">添加所选</button>');
+}
+function pmConfirm(type){
+  const ids = $$('#pmList input[type=checkbox]:checked').map(i => i.value);
+  if(!ids.length){ toast('请先勾选设备', 'bad'); return; }
+  if(!can(type === 'in' ? 'inbound' : 'outbound', 'create')){ toast('无登记权限', 'bad'); return; }
+  const exist = new Set(draft[type].lines.map(l => l.materialId).filter(Boolean));
+  let added = 0;
+  ids.forEach(mid => {
+    if(exist.has(mid)) return;
+    const blank = draft[type].lines.findIndex(l => !l.materialId && !Number(l.qty) && !String(l.remark || '').trim());
+    if(blank >= 0) draft[type].lines[blank] = {materialId: mid, qty:'', remark:''};
+    else draft[type].lines.push({materialId: mid, qty:'', remark:''});
+    exist.add(mid);
+    added++;
+  });
+  closeModal();
+  refreshLines(type);
+  refreshSummary(type);
+  toast('已添加 ' + added + ' 行' + (added < ids.length ? '（' + (ids.length - added) + ' 行已存在）' : ''), 'ok');
+}
+
 function lineRow(type, l, i){
-  const matOpts = '<option value="">选择物料</option>' + db.materials.map(m =>
+  const matOpts = '<option value="">选择设备</option>' + db.materials.map(m =>
     '<option value="' + m.id + '"' + (l.materialId === m.id ? ' selected' : '') + '>' +
-    esc(m.code + ' ' + m.name + ' · ' + m.unit) + '</option>').join('');
+    esc(m.name) + '</option>').join('');
   const hi = lineHintInfo(type, l);
   return '<div class="line">' +
     '<div><select data-change="lineMat" data-type="' + type + '" data-i="' + i + '">' + matOpts + '</select>' +
@@ -6064,7 +6246,7 @@ function viewSettings(){
           '· 账号停用后无法登录，已有会话在下次操作时失效；<br>' +
           '· 所有写入操作记录操作日志，可在「操作日志」中追溯；<br>' +
           '· 数据与备份均保存在本机浏览器，建议定期「下载当前数据」留档。' +
-        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.21</div></div><div><div class="k">存储方式</div><div class="v">' +
+        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.22</div></div><div><div class="k">存储方式</div><div class="v">' +
           (cloudEnabled() ? '云端共享（CloudBase PG）' : 'localStorage') + '</div></div>' +
         (cloudEnabled()
           ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap">' +
@@ -6967,7 +7149,8 @@ document.addEventListener('click', e => {
   }
   if(act === 'saveDocEdit'){ saveDocEdit(); return; }
   if(act === 'dlReset'){ state.docLedger = {kw:'', from:'', to:'', warehouseId:'all', projectId:'all'}; render(); return; }
-  if(act === 'nav'){ if(!pageCan(t.dataset.page, 'view')){ toast('当前账号无权访问该模块', 'bad'); return; } state.page = t.dataset.page; state.recPage = 1; closeModal(); render(); window.scrollTo(0,0); return; }
+  if(act === 'nav'){
+    document.body.classList.remove('nav-open'); if(!pageCan(t.dataset.page, 'view')){ toast('当前账号无权访问该模块', 'bad'); return; } state.page = t.dataset.page; state.recPage = 1; closeModal(); render(); window.scrollTo(0,0); return; }
   if(act === 'range'){ state.range = t.dataset.r; render(); return; }
   if(act === 'cfgMetrics'){ if(!can('settings','edit')){ toast('无仪表盘配置权限', 'bad'); return; } modalMetrics(); return; }
   if(act === 'closeModal'){ closeModal(); return; }
@@ -7059,6 +7242,8 @@ document.addEventListener('click', e => {
   if(act === 'stockResetSort'){ state.stockSort = {key:'', dir:0}; render(); return; }
 
   if(act === 'addLine'){ if(!can(type === 'in' ? 'inbound' : 'outbound','create')){ toast('无登记权限', 'bad'); return; } draft[type].lines.push({materialId:'', qty:'', remark:''}); refreshLines(type); refreshSummary(type); return; }
+  if(act === 'pickMaterials'){ modalPickMaterials(type); return; }
+  if(act === 'pmConfirm'){ pmConfirm(t.dataset.type === 'out' ? 'out' : 'in'); return; }
   if(act === 'delLine'){
     if(!can(type === 'in' ? 'inbound' : 'outbound','create')){ toast('无登记权限', 'bad'); return; }
     const i = Number(t.dataset.i);
@@ -7561,6 +7746,10 @@ document.addEventListener('click', e => {
     return;
   }
 
+  if(act === 'navToggle'){
+    document.body.classList.toggle('nav-open');
+    return;
+  }
   if(act === 'zoomStep'){
     const step = Number(t.dataset.v) || 0;
     setDisplay({scale: displayCfg().scale + step}, true);
@@ -7832,6 +8021,13 @@ document.addEventListener('dragend', () => { dragMid = null; clearDragMarks(); }
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if(t.id === 'pmKw'){
+    const box = document.getElementById('pmList');
+    const btn = document.querySelector('[data-act="pmConfirm"]');
+    const type = (btn && btn.dataset.type) === 'out' ? 'out' : 'in';
+    if(box) box.innerHTML = pmRowsHtml(type, t.value);
+    return;
+  }
   if(t.classList && t.classList.contains('alloc-qty')){
     const max = Number(t.dataset.max || 0);
     let v = Math.max(0, Math.floor(Number(t.value) || 0));
