@@ -1046,7 +1046,7 @@ const GUEST_PERMS = (() => {
   // 兜底基线：总览 / 库存数据 / 基础档案 / 项目（含调拨查看）/ 查询，全部只读
   const p = {};
   ['dashboard','stock','materialDetail','materials','warehouses',
-   'projectList','projects','projectTransfer','records'].forEach(id => { p[id] = ['view']; });
+   'projectList','projects','projectTransfer','records','usageBoard'].forEach(id => { p[id] = ['view']; });
   return p;
 })();
 /* 未登录（游客）的实际权限 = 「项目只读」角色配的只读权限。
@@ -1145,7 +1145,7 @@ function defaultRoles(){
     dashboard:['view'], stock:['view'], materialDetail:['view'],
     projectList:['view'], projects:['view'], projectTransfer:['view'],
     records:['view'], materials:['view'], warehouses:['view'],
-    orgUnits:[], usageBoard:[], inbound:[], inboundLedger:[], outbound:[], outboundLedger:[],
+    orgUnits:[], usageBoard:['view'], inbound:[], inboundLedger:[], outbound:[], outboundLedger:[],
     accounts:[], logs:[], backups:[], settings:[]
   };
   return [
@@ -1671,6 +1671,15 @@ function normalizeDB(){
       r.perms = next;
     });
     db.settings.permMig = 4;
+  }
+  /* v4.22 迁移：「项目只读」补设备使用看板查看权（老数据里是空数组，导致游客看不到；
+     补一次后管理员仍可在「账号与权限」里取消）。 */
+  if(!db.settings.permMig || db.settings.permMig < 5){
+    const rv = (db.roles || []).find(r => r.id === 'r_viewer');
+    if(rv && rv.perms && (!Array.isArray(rv.perms.usageBoard) || !rv.perms.usageBoard.length)){
+      rv.perms.usageBoard = ['view'];
+    }
+    db.settings.permMig = 5;
   }
   Object.keys(defBk).forEach(k => {
     if(db.settings.bk[k] === undefined || db.settings.bk[k] === null) db.settings.bk[k] = defBk[k];

@@ -229,7 +229,9 @@ setTimeout(async ()=>{
   const viewer = JSON.parse(w.eval("JSON.stringify(db.roles.find(r=>r.id==='r_viewer').perms)"));
   console.log('r_viewer 含 orgUnits:', JSON.stringify(viewer.orgUnits||[]),
     '| usageBoard:', JSON.stringify(viewer.usageBoard||[]));
-  if((viewer.orgUnits||[]).length || (viewer.usageBoard||[]).length) errors.push('项目只读不应获得新模块权限');
+  /* v4.22 起「项目只读」默认获得设备使用看板查看权（游客也要能看到），但仍不应有施工单位管理 */
+  if((viewer.orgUnits||[]).length) errors.push('项目只读不应获得施工单位管理权限');
+  if((viewer.usageBoard||[]).join(',') !== 'view') errors.push('项目只读应可查看设备使用看板');
   const keeper = JSON.parse(w.eval("JSON.stringify(db.roles.find(r=>r.id==='r_keeper').perms)"));
   console.log('r_keeper orgUnits:', JSON.stringify(keeper.orgUnits||[]),
     '| usageBoard:', JSON.stringify(keeper.usageBoard||[]));
