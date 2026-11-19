@@ -19,11 +19,22 @@
 | 认证 | CloudBase 匿名登录（`signInAnonymously`），应用内保留原有角色体系 |
 | 前端云同步 | 仅云端域名启用；启动拉取 → 每次 saveDB 防抖 800ms 推送；**拉取失败时禁止推送**（防本地演示数据覆盖云端真实数据） |
 | 部署 | WorkBuddy 应用托管：`https://wms-workbench-32376.app.workbuddy.host/?sharecode=65LI4R4UUA` |
-| 代码仓库 | 本地 git 已提交（43 文件，排除 dist/客户端/恢复/项目记忆）；待推 `HGangs/LZCRK` |
+| 代码仓库 | `https://github.com/HGangs/LZCRK`，43 文件，HEAD `ace9c7d`；推送走 SSH（`ssh.github.com:443`） |
+
+### 资源与实例（2026-11-19 核查）
+| 项 | 实测 | 说明 |
+|---|---|---|
+| 计费模式 | 个人版套餐（`baas_personal`），`EnvDeductionMode=credits` | **优先扣资源点**；`EnableOverrun=true`，超量按量继续扣 |
+| 资源点 | 总额 40000，已用 22601.49（56.5%），余约 17398 | 套餐周期 2026-10-28 ~ **2026-11-28 23:59**，`IsAutoRenew=false` |
+| 主要消耗 | EKS 23311.59（云托管常驻实例）、PostgreSQL 793.97、CLS 95.07、Gateway 82.5 | 日耗 600~900 点，几乎全部来自云托管 |
+| 工作台本身 | 静态托管（`static-hosting`），HOSTING/COS 用量 **0** | 无实例、无常驻算力，只走 CDN；网关日耗 0.7~6 点 |
+| 云托管 `lzxmgl` | 原 `OperationMode=alwaysScale`（常驻 1 核 2G） | 已改为 `condScale` + `MinNum=0` + `MaxNum=3`，CPU 60% 触发，不访问缩到 0 |
+| PostgreSQL | `postgres-3cpdnl7o`，`TenantType=SHARED` | 共享实例，随环境常驻，无法缩容 |
 
 ### 阻塞（需用户操作）
 1. **CloudBase 原生域名需备案**：`*.tcloudbaseapp.com` 与 `*.webapps.tcloudbase.com` 访问 HTML 会强制弹「风险提醒」并限访问量，无法正式使用 → 已改用 WorkBuddy 托管域名；如需自有域名，需提供已备案域名并绑定。
-2. **GitHub 仓库为公开**：`HGangs/LZCRK` 当前 public，WorkBuddy 的 GitHub 集成无建仓权限（403），需用户在 GitHub 设置里改为 Private 后再推送。
+2. ~~GitHub 连接器只读~~ **已绕过**：连接器的 GitHub App 只授予读权限，用户端无权限可改（`/settings/installations` 只能选仓库范围）。改用 SSH 部署密钥直推：`~/.ssh/id_wms` + `config` 指向 `ssh.github.com:443`；git 需 `http.sslBackend=openssl`（schannel 吊销检查会失败）。
+3. **云端数据为空**：`public.wms_state` 0 行，需在页面导入真实数据后才会产生首次写入。
 
 ### 安全边界
 - 当前匿名登录 + RLS 允许所有登录者读写同一文档 → 拿到链接即可改动数据。

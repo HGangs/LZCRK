@@ -1,0 +1,170 @@
+{
+ "README.md": {
+  "size": 27730,
+  "sha": "c5344179d4d36d6c684a6bbed5e3d92c85b00287"
+ },
+ "cloudbase/migrations/20261119113200_wms_state_table.sql": {
+  "size": 1021,
+  "sha": "afbb8b95153265fe8476324811c3dbcab19ead2c"
+ },
+ "desktop/assets/icon.ico": {
+  "size": 14538,
+  "sha": "3a35bc896f627ca1a0435e23d00d66e2cfea62bf"
+ },
+ "desktop/assets/icon.png": {
+  "size": 14516,
+  "sha": "4e76ef95b95d0afd29d8e9d0aa203cc9766639db"
+ },
+ "desktop/build.js": {
+  "size": 5352,
+  "sha": "73ccfdecbdf097f362aaf7588bde833c5cd199ca"
+ },
+ "desktop/main.js": {
+  "size": 12569,
+  "sha": "49eece4e199a42e44358b7e82628a87f79bce10a"
+ },
+ "desktop/make-icon.py": {
+  "size": 4180,
+  "sha": "197d3a342b116f3d86f0c468cf77e1583a01b36a"
+ },
+ "desktop/package-lock.json": {
+  "size": 79726,
+  "sha": "8ea13fb240b59fef95ad7a0be1a37481e5d5801f"
+ },
+ "desktop/package.json": {
+  "size": 369,
+  "sha": "33fa128fa5ca1e17668e791565862a71016f69b5"
+ },
+ "desktop/preload.js": {
+  "size": 1210,
+  "sha": "e90daa26f4bd95055ebc0394d0cebc93a8d955e2"
+ },
+ "index.html": {
+  "size": 462121,
+  "sha": "4c77789244a25fbf05c98fca416965451193566f"
+ },
+ "tests/run-all.js": {
+  "size": 4142,
+  "sha": "195fdb475b4d1cd209079cf94b9844134a78061b"
+ },
+ "tests/t1.js": {
+  "size": 11707,
+  "sha": "920685f26ac39d17e0ca63686aa63269e7d0b57d"
+ },
+ "tests/t10.js": {
+  "size": 2958,
+  "sha": "a81792a7a63c1d880f3019118e1f1de05e94e21d"
+ },
+ "tests/t11.js": {
+  "size": 4586,
+  "sha": "64e576f43b0d18c714cf48316f3e27d5ebd585fd"
+ },
+ "tests/t12.js": {
+  "size": 4492,
+  "sha": "36e307e70756aa75f7a9c37176e22d9bac84f966"
+ },
+ "tests/t13.js": {
+  "size": 5323,
+  "sha": "db9ca676533882a1cdd0956ec85ab344fb226a19"
+ },
+ "tests/t14.js": {
+  "size": 6858,
+  "sha": "8bdaadd67316b0feb45d2efd6927cfe9e9665f15"
+ },
+ "tests/t15.js": {
+  "size": 9325,
+  "sha": "b1006842e5b15d72f411af45f5bcf1e6c67f2ebc"
+ },
+ "tests/t16.js": {
+  "size": 8877,
+  "sha": "3260a7ab618dc599c4bba516e2a23da2bce7a284"
+ },
+ "tests/t17.js": {
+  "size": 10807,
+  "sha": "c08d2f825fdac290a8de14d1cf9e441f2eaa460e"
+ },
+ "tests/t18.js": {
+  "size": 6391,
+  "sha": "4e1853839bd730ef53a9b44e676a972a91584aac"
+ },
+ "tests/t19.js": {
+  "size": 14082,
+  "sha": "c14866aa5696483c9775f7989933f21c77a54cc3"
+ },
+ "tests/t2.js": {
+  "size": 5731,
+  "sha": "a455c9edd393d4cd4b88cfa8b9f8a10edf2980ed"
+ },
+ "tests/t20.js": {
+  "size": 6658,
+  "sha": "ae0b6b5feae2669d4e33bdedd0c6360ad20a23af"
+ },
+ "tests/t21.js": {
+  "size": 6272,
+  "sha": "979fa15918d9e000d5a6e572eacd01b6bb3b88d4"
+ },
+ "tests/t22.js": {
+  "size": 7776,
+  "sha": "d863b00f81388b0311c144ca00930b1127701019"
+ },
+ "tests/t3.js": {
+  "size": 3357,
+  "sha": "5458fde77a4aacc3d4251c82ece999a0630780e6"
+ },
+ "tests/t4.js": {
+  "size": 6269,
+  "sha": "7355d150470cb41f2c9be9fab4d5ae0731340a85"
+ },
+ "tests/t5.js": {
+  "size": 7571,
+  "sha": "99f3d150d24630f0c15494166e1a241d4c73ec3c"
+ },
+ "tests/t6.js": {
+  "size": 7678,
+  "sha": "8625da69595e89794ab9b6598dce45464ba2bb36"
+ },
+ "tests/t7.js": {
+  "size": 9112,
+  "sha": "ab923858d129945c5d6bdc9d11c99effdd0deaa4"
+ },
+ "tests/t8.js": {
+  "size": 5177,
+  "sha": "c6c8514059409de70cd7c04adcdc2aeb26c819c7"
+ },
+ "tests/t9.js": {
+  "size": 5886,
+  "sha": "4eab9c316e33199374247971d670dd5e224f916d"
+ },
+ "tools/preview.py": {
+  "size": 4795,
+  "sha": "0fd80c7cef9bef0e5b8f69007045c56320f5db8f"
+ },
+ "出入库存工作台-设计方案.md": {
+  "size": 111161,
+  "sha": "fb47e35df734cdef6b0f33c7d4b66b419abe15fc"
+ },
+ "启动工作台.cmd": {
+  "size": 1363,
+  "sha": "0304dcdf76b0a244a88212b2a7986aea13c5cc0f"
+ },
+ "打开工作台.cmd": {
+  "size": 600,
+  "sha": "ef2e3b9d55acdcd5e2a52fa2e985dd44519c7b05"
+ },
+ "记录/AGENT.md": {
+  "size": 5620,
+  "sha": "757ad7d3b93dc75037b37a8d92c88addb0457c32"
+ },
+ "记录/state.md": {
+  "size": 4326,
+  "sha": "173666612635a0023a55f5e7b64ec07d1be4b85d"
+ },
+ "记录/时间线.md": {
+  "size": 4167,
+  "sha": "63688549beaf76a77809da5c00616b448f48654e"
+ },
+ "记录/问题记录.md": {
+  "size": 5445,
+  "sha": "bb01fd1237b1d6fc2148c26bfab16cd6d2317d8f"
+ }
+}
