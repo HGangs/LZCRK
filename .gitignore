@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules/
+desktop/node_modules/
+desktop/.cache/
+desktop/app/
+dist/
+_deploy/
+
+# 本地客户端与恢复数据（含真实业务数据，不入库）
+客户端/
+恢复/
+
+# 临时产物
+_preview_*
+_*.py
+_*.js
+_*.html
+.wbapp_*.genie
+.wbapp_*
+
+# WorkBuddy 项目记忆与本地配置（不入公开仓库）
+.workbuddy/
+
+# 系统
+.DS_Store
+Thumbs.db
