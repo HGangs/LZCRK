@@ -2153,6 +2153,175 @@ async function importBackupText(text, name){
   };
   return importBackupFile(fake);
 }
+/* ================= 每日备份（云端 1 份 + 本机 1 份，v4.25） =================
+   旧实现的问题：createBackup 只把快照塞进 localStorage 索引，writeBackupFile 的
+   异步结果没人看；云端压根没有备份表。于是 toast「已按计划自动备份」时，
+   本机没文件、云端也没数据。这里改为两端分别执行并回传真实结果。 */
+function bkDayKey(ts){
+  const d = ts ? new Date(ts) : nowDate();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+const BK_LOCAL_KEY = 'wms_bklocal_v1';
+function bkLocalMarks(){
+  try{ return JSON.parse(localStorage.getItem(BK_LOCAL_KEY) || '{}') || {}; }catch(e){ return {}; }
+}
+function bkLocalMarkSet(day, info){
+  const all = bkLocalMarks();
+  all[day] = info;
+  const keys = Object.keys(all).sort();
+  while(keys.length > 60){ delete all[keys.shift()]; }
+  try{ localStorage.setItem(BK_LOCAL_KEY, JSON.stringify(all)); }catch(e){}
+}
+/* 云端当日备份是否存在 */
+async function cloudBackupGet(day){
+  if(!cloud.on) return { ok:false, reason:'offline', err:'云端未连接' };
+  try{
+    const r = await cloud.rdb.from('wms_backup')
+      .select('id,day,kind,size_bytes,counts,created_at')
+      .eq('doc_id', CLOUD_CFG.docId).eq('day', day).eq('kind', 'auto').limit(1);
+    if(r.error) return { ok:false, reason:'error', err:r.error.message || '' };
+    const row = (r.data || [])[0];
+    if(!row) return { ok:false, reason:'missing' };
+    return { ok:true, at:row.created_at || '', size:Number(row.size_bytes) || 0, counts:row.counts || {} };
+  }catch(e){ return { ok:false, reason:'error', err:(e && e.message) || '' }; }
+}
+/* 云端当日备份写入（存在则覆盖） */
+async function cloudBackupPut(day, payload, counts, size){
+  if(!cloud.on) return { ok:false, reason:'offline', err:'云端未连接' };
+  try{
+    const base = {
+      payload, size_bytes: size, counts,
+      created_at: new Date().toISOString(), created_by: cloudUser()
+    };
+    const cur = await cloud.rdb.from('wms_backup').select('id')
+      .eq('doc_id', CLOUD_CFG.docId).eq('day', day).eq('kind', 'auto').limit(1);
+    if(cur.error) return { ok:false, reason:'error', err:cur.error.message || '' };
+    const row = (cur.data || [])[0];
+    const r = row && row.id
+      ? await cloud.rdb.from('wms_backup').update(base).eq('id', row.id)
+      : await cloud.rdb.from('wms_backup').insert([Object.assign({ doc_id: CLOUD_CFG.docId, day, kind:'auto' }, base)]);
+    if(r.error) return { ok:false, reason:'error', err:r.error.message || '' };
+    return { ok:true, at: base.created_at, size };
+  }catch(e){ return { ok:false, reason:'error', err:(e && e.message) || '' }; }
+}
+/* 本机当日备份状态：有目录句柄就看目录里当天文件，没有就看记录 */
+async function localBackupStatus(day){
+  const mark = bkLocalMarks()[day] || null;
+  if(window.desktopHost){
+    let dir = null;
+    try{ const r = await window.desktopHost.getDir(); dir = (r && r.ok) ? r : null; }catch(e){}
+    if(!dir){
+      if(mark && mark.at) return { ok:true, at:mark.at, path:mark.path || '', verified:false };
+      return { ok:false, reason:'no-dir', label:'未连接目录', at:'' };
+    }
+    if(mark && mark.at) return { ok:true, at:mark.at, path:mark.path || dir.path || dir.name || '' };
+    return { ok:false, reason:'missing', label:'目录已连接，当日未写入', at:'' };
+  }
+  const h = await loadBackupDirHandle();
+  if(!h){
+    if(mark && mark.at) return { ok:true, at:mark.at, path:mark.path || '', verified:false };
+    return { ok:false, reason:'no-dir', label:'未连接目录（浏览器）', at:'' };
+  }
+  try{
+    const perm = await h.queryPermission({ mode:'readwrite' });
+    if(perm !== 'granted'){
+      if(mark && mark.at) return { ok:true, at:mark.at, path:mark.path || '', verified:false };
+      return { ok:false, reason:'prompt', label:'目录权限待确认', at:'' };
+    }
+    const dir = await h.getDirectoryHandle('auto', { create:false });
+    let hit = '';
+    for await (const [name, fh] of dir.entries()){
+      if(fh.kind === 'file' && name.indexOf(day.replace(/-/g, '')) >= 0) hit = name;
+      else if(fh.kind === 'file' && name.indexOf(day) >= 0) hit = name;
+    }
+    if(hit) return { ok:true, at:(mark && mark.at) || '', path:h.name + '/auto/' + hit, file:hit };
+    return { ok:false, reason:'missing', label:'目录已连接，当日无文件', path:h.name + '/auto' };
+  }catch(e){
+    if(e && e.name === 'NotFoundError') return { ok:false, reason:'missing', label:'auto 子目录还没有文件' };
+    return { ok:false, reason:'error', err:(e && e.message) || '', label:'目录不可读' };
+  }
+}
+/* 双端状态汇总 */
+async function dailyBackupStatus(){
+  const day = bkDayKey();
+  const cloudSt = await cloudBackupGet(day);
+  const localSt = await localBackupStatus(day);
+  return { day, cloud:cloudSt, local:localSt };
+}
+/* 执行一次真实的每日备份：两端各写一份，返回各自结果 */
+async function runDailyBackup(reason, only){
+  const day = bkDayKey();
+  const payload = JSON.parse(JSON.stringify(db));
+  const raw = JSON.stringify(payload);
+  const counts = backupCounts(payload);
+  const c = bkCfg();
+  const item = {
+    id: uid('bk'), type:'auto', note: reason || ('每日自动备份 · ' + day),
+    at: nowMs(), createdAt: nowTs(), size: raw.length,
+    path: c.autoPath || '', counts, payload
+  };
+
+  const out = { day, cloud:{ ok:false, skipped:true }, local:{ ok:false, skipped:true }, item };
+
+  if(!only || only.cloud){
+    out.cloud = await cloudBackupPut(day, payload, counts, raw.length);
+    if(!out.cloud.ok) out.cloud.err = out.cloud.err || (out.cloud.reason === 'offline' ? '云端未连接' : '写入失败');
+  }
+  if(!only || only.local){
+    const lr = await writeBackupFile(item, { ask:false });
+    if(lr.ok){
+      out.local = { ok:true, path:lr.path, at:nowTs() };
+      bkLocalMarkSet(day, { at:nowTs(), path:lr.path });
+    }else{
+      const reasonText = lr.reason === 'no-dir' ? '未连接本机备份目录'
+        : lr.reason === 'prompt' ? '目录权限未授予'
+        : (lr.message || '写入失败');
+      out.local = { ok:false, reason:lr.reason, err:reasonText, at:'' };
+    }
+  }
+
+  if(out.cloud.ok || out.local.ok){
+    backups.unshift(item);
+    backups.sort((a, b) => b.at - a.at);
+    trimBackups();
+    saveBackups();
+    lastAutoAt = nowMs();
+    dirtyCount = 0;
+  }
+  return out;
+}
+/* 打开平台 / 每分钟巡检：两端都在就跳过，缺哪端补哪端 */
+let _dailyBusy = false;
+async function ensureDailyBackup(opts){
+  const c = bkCfg();
+  if(!c.autoEnabled) return { skipped:true, reason:'disabled' };
+  if(_dailyBusy) return { skipped:true, reason:'busy' };
+  _dailyBusy = true;
+  try{
+    const st = await dailyBackupStatus();
+    if(st.cloud.ok && st.local.ok){
+      if(!(opts && opts.silent)) toast('今日云端与本机备份均已存在，跳过备份', 'ok');
+      return { skipped:true, both:true, status:st };
+    }
+    const r = await runDailyBackup('每日自动备份 · ' + st.day, { cloud:!st.cloud.ok, local:!st.local.ok });
+    const parts = [];
+    if(r.cloud.skipped) parts.push('云端已存在');
+    else if(r.cloud.ok) parts.push('云端已补 1 份'); else parts.push('云端失败（' + (r.cloud.err || '未连接') + '）');
+    if(r.local.skipped) parts.push('本机已存在');
+    else if(r.local.ok) parts.push('本机已补 1 份'); else parts.push('本机失败（' + (r.local.err || '未连接目录') + '）');
+    const anyOk = r.cloud.ok || r.local.ok;
+    if(anyOk && !(opts && opts.silent)){
+      toast('已补执行每日备份：' + parts.join('，'), r.cloud.ok && r.local.ok ? 'ok' : null);
+    }else if(!anyOk && !(opts && opts.silent)){
+      toast('每日备份未完成：' + parts.join('，'), 'bad');
+    }
+    if(state.page === 'backups') render();
+    return Object.assign({ skipped:false }, r);
+  }finally{
+    _dailyBusy = false;
+  }
+}
+
 function createBackup(type, note, opts){
   const payload = JSON.parse(JSON.stringify(db));
   const raw = JSON.stringify(payload);
@@ -2168,10 +2337,11 @@ function createBackup(type, note, opts){
   backups.sort((a,b) => b.at - a.at);
   trimBackups();
   const ok = saveBackups();
-  if(ok && !(opts && opts.noWrite)) writeBackupFile(item, {ask:false});   // 已连接目录时静默写入
+  /* 注意：这里只写浏览器索引。真实落盘交给 deliverBackup / runDailyBackup，
+     旧代码在此处 fire-and-forget 写文件并忽略结果，是「提示成功但没有文件」的根源。 */
   lastAutoAt = nowMs();
   dirtyCount = 0;
-  return {item, ok};
+  return { item, ok };
 }
 /* 每次写入后调用：达到「累计变更次数」或「距上次备份 ≥ 最短间隔」即自动备份 */
 function noteChange(){
@@ -2184,7 +2354,7 @@ function noteChange(){
   const gap = numOr(c.autoIntervalMin, 30, 1, 1440) * 60 * 1000;
   if(dirtyCount >= thr || now - lastAutoAt >= gap){
     const r = createBackup('auto', '自动备份 · 累计 ' + dirtyCount + ' 次数据变更');
-    if(r.ok) toast('已自动备份当前数据（' + backupSizeText(r.item) + '）', 'ok');
+    if(r.ok) toast('已记录一份快照到备份区（' + backupSizeText(r.item) + '，可导出）', null);
   }
 }
 function hhmmAt(hhmm, base){
@@ -2194,6 +2364,54 @@ function hhmmAt(hhmm, base){
   return d.getTime();
 }
 function lastAutoBackupAt(){ const a = backups.find(b => b.type === 'auto'); return a ? a.at : 0; }
+/* 备份状态面板：异步填充，避免 render 同步阻塞 */
+let _bkStatusTimer = null;
+function scheduleBkStatus(){
+  if(state.page !== 'backups') return;
+  clearTimeout(_bkStatusTimer);
+  _bkStatusTimer = setTimeout(renderDailyBackupBox, 240);
+}
+function setBkChip(id, ok, text){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.className = 'chip' + (ok ? ' chip-green' : '');
+  el.textContent = text;
+  el.style.color = ok ? '' : 'var(--red)';
+}
+async function renderDailyBackupBox(){
+  const box = document.getElementById('bkDailyBox');
+  if(!box) return;
+  let st;
+  try{ st = await dailyBackupStatus(); }catch(e){ box.innerHTML = '<div class="empty" style="padding:16px">检测失败：' + esc((e && e.message) || '') + '</div>'; return; }
+  const c = st.cloud, l = st.local;
+  const cloudText = c.ok
+    ? '今日已备份 · ' + String(c.at || '').replace('T',' ').slice(0, 16) + ' · ' + (c.size ? (c.size/1024).toFixed(1) + ' KB' : '')
+    : (c.reason === 'missing' ? '今日未备份（云端可写，等待执行）' : (c.err || '云端未连接'));
+  const localText = l.ok
+    ? '今日已写入 ' + (l.path || '本机目录')
+    : (l.reason === 'missing' ? '今日未写入（目录已连接，等待执行）' : (l.err || l.label || '未连接目录'));
+  const okAll = c.ok && l.ok;
+  box.innerHTML =
+    '<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<span class="chip' + (okAll ? ' chip-green' : '') + '" style="' + (okAll ? '' : 'color:var(--red)') + '">' +
+        (okAll ? '今日两端备份齐全' : '今日备份不完整') + '</span>' +
+      '<span class="sub">日期 ' + esc(st.day) + ' · 每日 ' + esc(bkCfg().autoTime || '02:00') + ' 自动执行，打开平台时缺则补</span>' +
+    '</div>' +
+    '<div class="form-grid" style="grid-template-columns:1fr 1fr;gap:14px">' +
+      '<div class="tip" style="line-height:1.75">' +
+        '<div class="strong" style="margin-bottom:4px">' + (c.ok ? '✅' : '❌') + ' 云端备份</div>' +
+        '<div class="sub">' + esc(cloudText) + '</div>' +
+        '<div class="sub mono" style="margin-top:4px">CloudBase PG · public.wms_backup</div>' +
+      '</div>' +
+      '<div class="tip" style="line-height:1.75">' +
+        '<div class="strong" style="margin-bottom:4px">' + (l.ok ? '✅' : '❌') + ' 本机备份</div>' +
+        '<div class="sub">' + esc(localText) + '</div>' +
+        '<div class="sub mono" style="margin-top:4px">' + esc(bkCfg().autoPath || 'backup/auto') + '</div>' +
+      '</div>' +
+    '</div>';
+  setBkChip('bkCloudState', !!c.ok, c.ok ? '已连接' : (c.reason === 'missing' ? '可写 · 今日未备份' : '未连接'));
+  setBkChip('bkLocalState', !!l.ok, l.ok ? '已连接' : (l.reason === 'missing' ? '可写 · 今日未备份' : (l.err || l.label || '未连接')));
+}
 function lastManualBackupAt(){ const m = backups.find(b => b.type === 'manual'); return m ? m.at : 0; }
 /* 每日定时：到了设定时刻且当天还没有自动备份，就补一份 */
 function checkScheduledBackup(){
@@ -2201,22 +2419,23 @@ function checkScheduledBackup(){
   if(!c.autoEnabled) return;
   const due = hhmmAt(c.autoTime);
   if(nowMs() >= due && lastAutoBackupAt() < due){
-    const r = createBackup('auto', '定时自动备份 · 每日 ' + (c.autoTime || '02:00'));
-    if(r.ok){
-      toast('已按计划自动备份（每日 ' + (c.autoTime || '02:00') + '）', 'ok');
-      if(state.page === 'backups') render();
-    }
+    /* 先落一条浏览器快照（索引 / 兜底），再异步做真实双端写入 */
+    createBackup('auto', '定时自动备份 · 每日 ' + (c.autoTime || '02:00'));
+    ensureDailyBackup({ silent:false });
   }
 }
 function bootAutoBackup(){
   booted = true;
   const c = bkCfg();
   if(!c.autoEnabled) return;
-  if(!backups.length){ createBackup('auto', '首次自动备份 · 工作台初始化'); return; }
-  checkScheduledBackup();
-  if(nowMs() - lastAutoBackupAt() >= 24 * 60 * 60 * 1000){
-    const r = createBackup('auto', '每日自动备份 · 距上次备份超过 24 小时');
-    if(r.ok) toast('已生成每日自动备份', 'ok');
+  /* 打开平台 / 服务启动：等云连接就绪后检测当日两端备份 */
+  setTimeout(function(){ ensureDailyBackup({ boot:true }); }, 2200);
+  /* 页面开着时每分钟巡检一次（浏览器没有后台定时，这是能做到的最细粒度） */
+  if(!bootAutoBackup._timer){
+    bootAutoBackup._timer = setInterval(function(){
+      if(!bkCfg().autoEnabled) return;
+      ensureDailyBackup({ silent:true });
+    }, 60 * 1000);
   }
 }
 /* 手动备份提醒：超过设定天数没有手动备份则提示 */
@@ -2615,6 +2834,7 @@ function render(){
   syncPlDrawer();
   applyDisplay();
   initProjSplit();
+  scheduleBkStatus();
 
   renderNav();
   renderChrome();
@@ -6148,7 +6368,7 @@ function viewBackups(){
   const stats = '<div class="kpi-grid">' +
     '<div class="kpi"><div class="kpi-label">备份总数</div><div class="kpi-value">' + backups.length + '<small>份</small></div><div class="kpi-sub">自动 ' + autoCnt + ' · 手动 ' + manualCnt + '</div></div>' +
     '<div class="kpi"><div class="kpi-label">最近备份</div><div class="kpi-value" style="font-size:19px">' + (last ? esc(last.createdAt.slice(5,16)) : '暂无') + '</div><div class="kpi-sub">' + (last ? (last.type === 'auto' ? '自动备份' : '手动备份') + ' · ' + backupSizeText(last) : '建议立即创建一份') + '</div></div>' +
-    '<div class="kpi"><div class="kpi-label">占用空间</div><div class="kpi-value">' + (totalSize/1024).toFixed(0) + '<small>KB</small></div><div class="kpi-sub">存于浏览器本地</div></div>' +
+    '<div class="kpi"><div class="kpi-label">占用空间</div><div class="kpi-value">' + (totalSize/1024).toFixed(0) + '<small>KB</small></div><div class="kpi-sub">浏览器索引 + 云端</div></div>' +
     '<div class="kpi"><div class="kpi-label">覆盖数据</div><div class="kpi-value">' + (last ? last.counts.records : db.records.length) + '<small>条流水</small></div><div class="kpi-sub">含项目 / 物料 / 账号</div></div>' +
   '</div>';
 
@@ -6160,7 +6380,7 @@ function viewBackups(){
 
   const dirPanel = '<div class="field mt12"><label>本机备份目录（实际落盘）</label>' +
     '<div class="row" style="gap:8px;align-items:center">' +
-      '<span class="chip' + (c.dirName ? ' chip-green' : '') + '">' + (c.dirName ? '已连接：' + esc(c.dirName) : '未连接（备份仅存浏览器）') + '</span>' +
+      '<span class="chip' + (c.dirName ? ' chip-green' : '') + '" id="bkLocalState">' + (c.dirName ? '已连接：' + esc(c.dirName) : '未连接（备份仅存浏览器）') + '</span>' +
       (editable ? '<button class="btn btn-sm" data-act="pickBkDir">' + icon('folder') + (c.dirName ? '更换目录' : '选择目录') + '</button>' : '') +
       (editable && c.dirName ? '<button class="btn btn-sm btn-ghost" data-act="clearBkDir">断开目录</button>' : '') +
     '</div>' +
@@ -6169,6 +6389,11 @@ function viewBackups(){
       : '连接目录后，备份会真实写入该目录下的 auto/ 与 manual/ 子目录；浏览器不支持目录访问时自动改为下载 JSON。') + '</span>' +
     '<label class="chk-row mt8"><input type="checkbox" id="bk-dl"' + (c.autoDownload !== false ? ' checked' : '') + (editable ? '' : ' disabled') + '>' +
       '<span>未连接目录时，手动备份后自动下载 JSON 文件</span></label></div>';
+
+  const dailyCard = '<div class="card mt16"><div class="card-head"><div class="card-title">' + icon('shield') + '今日备份状态' +
+      '<span class="cnt">云端 1 份 + 本机 1 份 · 缺哪端补哪端</span></div>' +
+      (can('backups','create') ? '<button class="btn btn-sm" data-act="bkRunNow">' + icon('upload') + '立即执行今日备份</button>' : '') +
+    '</div><div class="card-body" id="bkDailyBox"><div class="empty" style="padding:16px">正在检测云端与本机…</div></div></div>';
 
   const cfg = '<div class="card mt16"><div class="card-head"><div class="card-title">' + icon('gear') + '备份设置</div>' +
       '<span class="sub">自动 / 手动备份的时间、路径与保留策略</span></div>' +
@@ -6186,8 +6411,14 @@ function viewBackups(){
           '<div class="field"><label>保留份数</label>' + row('bk-akeep','number',c.autoKeep,!editable) +
             '<span class="hint">超出后淘汰最旧的一份</span></div>' +
         '</div>' +
-        '<div class="field mt12"><label>自动备份路径</label>' + row('bk-apath','text',c.autoPath,!editable,'如 D:/WMS/backup/auto') +
-          '<span class="hint">未连接目录时只作标记；连接本机目录后按此结构实际写盘</span></div>' +
+        '<div class="field mt12"><label>自动备份路径（本机）</label>' + row('bk-apath','text',c.autoPath,!editable,'如 D:/WMS/backup/auto') +
+          '<span class="hint">连接本机目录后按此结构实际写盘（auto/ 子目录）</span></div>' +
+        '<div class="field mt12"><label>云端备份路径</label>' +
+          '<div class="row" style="gap:8px;align-items:center">' +
+            '<span class="mono" style="font-size:12px">CloudBase PG · public.wms_backup</span>' +
+            '<span class="chip" id="bkCloudState">检测中…</span>' +
+          '</div>' +
+          '<span class="hint">每日一份，跟随云端账号，换设备也能恢复</span></div>' +
       '</div>' +
       '<div><div class="sec-title">' + icon('cloud') + '手动备份</div>' +
         '<div class="tip" style="line-height:1.7">手动备份随时可做，不受自动策略影响；恢复前会自动生成一份「恢复前快照」。</div>' +
@@ -6256,7 +6487,7 @@ function viewBackups(){
         '<button class="btn btn-sm" data-act="downloadCurrent">' + icon('download') + '导出当前数据</button>' +
         (can('backups','create') ? '<button class="btn btn-sm btn-primary" data-act="newBackup">' + icon('plus') + '立即备份</button>' : '') +
       '</div></div><div class="card-body">' + stats + '</div></div>' +
-    cfg + scope + list + danger;
+    dailyCard + cfg + scope + list + danger;
 }
 
 /* 清空业务数据：先做快照，再清业务表；账号/角色/设置/备份保留 */
@@ -6407,7 +6638,7 @@ function viewSettings(){
           '· 账号停用后无法登录，已有会话在下次操作时失效；<br>' +
           '· 所有写入操作记录操作日志，可在「操作日志」中追溯；<br>' +
           '· 数据与备份均保存在本机浏览器，建议定期「下载当前数据」留档。' +
-        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.24</div></div><div><div class="k">存储方式</div><div class="v">' +
+        '</div><div class="mini-kv mt12"><div><div class="k">版本</div><div class="v">v4.25</div></div><div><div class="k">存储方式</div><div class="v">' +
           (cloudEnabled() ? '云端共享（CloudBase PG）' : 'localStorage') + '</div></div>' +
         (cloudEnabled()
           ? '<div class="row mt12" style="gap:8px;flex-wrap:wrap">' +
@@ -7918,6 +8149,11 @@ document.addEventListener('click', e => {
   }
   if(act === 'zoomReset'){ setDisplay({scale:100}, true); render(); return; }
   if(act === 'ubTab'){ state.ubTab = t.dataset.m === 'units' ? 'units' : 'overview'; render(); return; }
+  if(act === 'bkRunNow'){
+    if(!can('backups','create')){ toast('无备份执行权限', 'bad'); return; }
+    ensureDailyBackup({}).then(function(){ scheduleBkStatus(); });
+    return;
+  }
   if(act === 'editIssue'){ modalEditIssue(id); return; }
   if(act === 'saveIssue'){ saveIssueEdit(id); return; }
   if(act === 'delIssue'){ delIssueRecord(id); return; }
